@@ -253,7 +253,10 @@ resource "aws_iam_role_policy" "lambda_deploy" {
         Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
         Condition = {
           StringEquals = {
-            "iam:PassedToService" = "lambda.amazonaws.com"
+            "iam:PassedToService" = [
+              "lambda.amazonaws.com",
+              "scheduler.amazonaws.com", # iter 0.C.2 — EventBridge Scheduler invoke role
+            ]
           }
         }
       },
@@ -430,10 +433,14 @@ resource "aws_iam_role_policy" "ssm_access" {
           "ssm:RemoveTagsFromResource",
           "ssm:ListTagsForResource",
         ]
-        # CI manages app secrets per env; aws-setup owns the cert/cf/route53/s3 paths.
+        # CI manages app secrets + iter-0.C resource handles per env; aws-setup
+        # still owns the cert/cf/route53/s3 paths.
         Resource = [
           "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/app/*",
           "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/secret/*",
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/kms/*",     # iter 0.C.8 — passcode CMK alias ARN
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/cognito/*", # future: cognito IDs for the admin app
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/ses/*",     # future: SES handles for the sender Lambda
         ]
       },
     ]
