@@ -19,7 +19,7 @@ Marking convention: `[ ]` not done, `[~]` in progress, `[x]` done.
 - [ ] **0.A.4** **HUMAN ONLY.** AWS bootstrap per `docs/BOOTSTRAP.md`: state bucket, first apply, NS records, second apply, SSM contract, GH secrets. Run with `aws-vault exec personal_iphone -- terraform …` from `aws-setup/`.
 - [ ] **0.A.5** **HUMAN ONLY.** First production deploy via `git push origin main`; verify all three URLs respond.
 - [ ] **0.A.6** **HUMAN ONLY.** Verify per-PR env: open + close a no-op PR; cleanup must succeed.
-- [ ] **0.A.7** Create stub `CLAUDE.md` files in `lambdas/`, `terraform/`, `worker/`, `frontend/` per `11-agents.md` § "Sub-directory CLAUDE.md files". Each is short and references the spec.
+- [x] **0.A.7** Create stub `CLAUDE.md` files in `lambdas/`, `terraform/`, `worker/`, `frontend/` per `11-agents.md` § "Sub-directory CLAUDE.md files". Each is short and references the spec. *(done 2026-05-08; `worker/` directory created as a placeholder for iter 0.D.2.)*
 
 ## High Priority — Iteration 0.B: CI Efficiency
 
