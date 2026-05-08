@@ -40,14 +40,14 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 
 ## High Priority — Iteration 0.C: Agency-specific Terraform
 
-- [ ] **0.C.1** Extend `terraform/dynamodb-items.tf` with `gsi1`, `gsi2`, `gsi3` per `02-data-model.md`.
-- [ ] **0.C.2** `terraform/eventbridge.tf`: custom bus `pipeline${local.env_suffix}` + archive + scheduler group + hourly discovery rule (disabled) + weekly tuner rule (disabled).
-- [ ] **0.C.3** `terraform/cognito.tf`: user pool, hosted UI, app client, JWT authorizer on the API. Seed one operator with out-of-band password.
-- [ ] **0.C.4** `terraform/ses.tf`: configuration set, suppression list, bounce/complaint SNS topic. Sender `outreach.<base>`.
-- [ ] **0.C.5** `terraform/bedrock-iam.tf`: ONE grouped `bedrock-invoke` policy on the two model ARNs (skeleton pitfall #6).
-- [ ] **0.C.6** `terraform/s3-blobs.tf`: `pipeline-blobs${local.env_suffix}` bucket; `force_destroy=true` non-prod.
-- [ ] **0.C.7** `terraform/sqs.tf`: one DLQ per planned consumer; 14-day retention.
-- [ ] **0.C.8** `terraform/kms.tf`: KMS CMK `passcode-cleartext-${env}` for KMS-encrypting passcode cleartext (used by publisher + email-draft). Auto-rotation enabled.
+- [x] **0.C.1** Extend `terraform/dynamodb-items.tf` with `gsi1`, `gsi2`, `gsi3` per `02-data-model.md`.
+- [x] **0.C.2** `terraform/eventbridge.tf`: custom bus `pipeline${local.env_suffix}` + archive + scheduler group + hourly discovery rule (disabled) + weekly tuner rule (disabled). *(also adds the three weekly tuner rules at 02:00 UTC Sunday + the scheduler invoke role.)*
+- [x] **0.C.3** `terraform/cognito.tf`: user pool, hosted UI, app client, JWT authorizer on the API. Seed one operator with out-of-band password. *(seeding the first operator is a manual `aws cognito-idp admin-create-user` step — not in code; documented in `docs/BOOTSTRAP.md` once iter 0.C lands.)*
+- [x] **0.C.4** `terraform/ses.tf`: configuration set, suppression list, bounce/complaint SNS topic. Sender `outreach.<base>`. *(includes domain identity + DKIM CNAMEs + MAIL FROM domain; SES sandbox-out is a separate manual step before iter 8 sends real email.)*
+- [x] **0.C.5** `terraform/bedrock-iam.tf`: ONE grouped `bedrock-invoke` policy on the two model ARNs (skeleton pitfall #6).
+- [x] **0.C.6** `terraform/s3-blobs.tf`: `pipeline-blobs${local.env_suffix}` bucket; `force_destroy=true` non-prod.
+- [x] **0.C.7** `terraform/sqs.tf`: one DLQ per planned consumer; 14-day retention. *(14 consumers seeded — discover, audit, qualifier, backlog-promoter, spec-generator, generator, publisher, email-draft, sender, reply-triage, ses-feedback, tuner-targeting, tuner-style, tuner-email-tone.)*
+- [x] **0.C.8** `terraform/kms.tf`: KMS CMK `passcode-cleartext-${env}` for KMS-encrypting passcode cleartext (used by publisher + email-draft). Auto-rotation enabled.
 
 ## High Priority — Iteration 0.D: Cloudflare R2 + Worker (passcode-gated)
 
