@@ -67,7 +67,7 @@ variable "parent_domain" {
 
 variable "github_org" {
   type        = string
-  default     = "techar.ch"
+  default     = "reaandrew"
   description = "GitHub org — constrains the OIDC trust policy"
 }
 
