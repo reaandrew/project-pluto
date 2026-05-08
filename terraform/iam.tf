@@ -1,5 +1,3 @@
-# CI-LANE-VALIDATION: no-op marker added to exercise terraform-changed path filter
-# during iter 0.B PR; reverted before merge.
 # ONE Lambda execution role + policies grouped BY PERMISSION LEVEL (not per-table).
 # Pitfall #6: long branch names + per-table policies push the inline-policy size
 # over the 10KB limit (smm 34d7d25). Adding new tables = append actions to existing

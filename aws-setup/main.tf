@@ -355,6 +355,12 @@ resource "aws_iam_role_policy" "dynamodb" {
 resource "aws_iam_role_policy" "iam_roles" {
   name = "iam-roles"
   role = aws_iam_role.github_actions.id
+  # Per-env IAM management policy on the GitHub-Actions OIDC role. It MUST be able
+  # to Create / Update / Delete Lambda execution roles for each preview env. The
+  # Resource restriction (arn:...:role/ai-website-agency-*) scopes the blast radius
+  # to this project only — the role cannot escalate outside `ai-website-agency-*`.
+  # Semgrep priv-esc / resource-exposure rules flag this as exposure; suppressed
+  # via `.semgrepignore` (aws-setup/ excluded — operator-only project CI infra).
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -376,6 +382,10 @@ resource "aws_iam_role_policy" "iam_roles" {
           "iam:TagRole",
           "iam:UntagRole",
           "iam:ListRoleTags",
+          # Required by terraform when destroying a role: it checks whether any
+          # EC2 instance profile depends on the role before deletion. Without
+          # this, destroy.yml fails on the first delete after PR close.
+          "iam:ListInstanceProfilesForRole",
         ]
         Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
       },

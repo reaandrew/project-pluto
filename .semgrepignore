@@ -1,0 +1,9 @@
+# Semgrep ignore patterns. Same gitignore syntax.
+
+# aws-setup/ is the singleton operator-only Terraform stack: GitHub Actions OIDC role,
+# CloudFront/Lambda@Edge for the BFF, ACM, Route53. The IAM policies on the OIDC role
+# deliberately include role-management actions (Create/Update/Delete) scoped to
+# `ai-website-agency-*` resources so per-PR deploy/destroy can manage Lambda exec roles.
+# Semgrep's terraform.lang.security.iam priv-esc / resource-exposure rules flag these
+# as exposure even with the Resource restriction — false positives for our use case.
+aws-setup/
