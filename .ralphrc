@@ -20,8 +20,25 @@ CLAUDE_OUTPUT_FORMAT="json"
 # TOOL PERMISSIONS
 # =============================================================================
 
-# Read/Write/Edit + safe git + pnpm + cdk + wrangler + terraform plan + vitest
-ALLOWED_TOOLS="Write,Read,Edit,Grep,Glob,Bash(git add *),Bash(git commit *),Bash(git diff *),Bash(git log *),Bash(git status),Bash(git status *),Bash(git push *),Bash(git pull *),Bash(git fetch *),Bash(git checkout *),Bash(git branch *),Bash(git stash *),Bash(git merge *),Bash(git tag *),Bash(pnpm *),Bash(npx *),Bash(cdk *),Bash(wrangler *),Bash(terraform plan *),Bash(terraform fmt *),Bash(terraform validate *),Bash(node *),Bash(vitest *),Bash(playwright *),Bash(docker compose up *),Bash(docker compose down *),Bash(docker compose logs *)"
+# Generous allowlist for autonomous operation. Excludes only the genuinely
+# destructive / human-only commands: aws-vault, terraform apply, terraform
+# destroy, sudo, ssh. The destructive-AWS hook in .claude/settings.json
+# blocks `terraform destroy` against protected envs and S3 prod bucket
+# deletion as a second layer.
+ALLOWED_TOOLS="Write,Read,Edit,Grep,Glob,\
+Bash(git *),\
+Bash(grep *),Bash(find *),Bash(ls *),Bash(cat *),Bash(head *),Bash(tail *),Bash(wc *),Bash(file *),Bash(stat *),Bash(which *),Bash(whoami),Bash(pwd),Bash(env),Bash(printenv *),Bash(date *),Bash(diff *),\
+Bash(jq *),Bash(yq *),Bash(awk *),Bash(sed *),Bash(cut *),Bash(sort *),Bash(uniq *),Bash(tr *),Bash(xargs *),Bash(tee *),\
+Bash(mkdir *),Bash(cp *),Bash(mv *),Bash(touch *),Bash(chmod *),Bash(rm *),Bash(ln *),\
+Bash(echo *),Bash(printf *),Bash(test *),Bash(true),Bash(false),\
+Bash(curl *),Bash(wget *),Bash(nc *),\
+Bash(gh *),\
+Bash(make *),Bash(go *),Bash(gofmt *),Bash(goimports *),\
+Bash(pnpm *),Bash(npm *),Bash(npx *),Bash(node *),Bash(yarn *),Bash(tsc *),Bash(vitest *),Bash(jest *),Bash(playwright *),\
+Bash(cdk *),Bash(wrangler *),\
+Bash(terraform plan *),Bash(terraform fmt *),Bash(terraform validate *),Bash(terraform init *),Bash(terraform show *),Bash(terraform output *),Bash(terraform state list *),Bash(terraform state show *),Bash(terraform providers *),Bash(terraform graph *),Bash(terraform version),Bash(tflint *),Bash(tfsec *),Bash(checkov *),\
+Bash(docker compose up *),Bash(docker compose down *),Bash(docker compose logs *),Bash(docker compose ps *),Bash(docker compose exec *),Bash(docker compose run *),Bash(docker compose build *),\
+Bash(bash *),Bash(sh *),Bash(./scripts/* *),Bash(./scripts/*),Bash(./bin/* *),Bash(./bin/*),Bash(./Makefile *)"
 
 # =============================================================================
 # SESSION MANAGEMENT
