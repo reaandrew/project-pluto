@@ -376,6 +376,10 @@ resource "aws_iam_role_policy" "iam_roles" {
           "iam:TagRole",
           "iam:UntagRole",
           "iam:ListRoleTags",
+          # Required by terraform when destroying a role: it checks whether any
+          # EC2 instance profile depends on the role before deletion. Without
+          # this, destroy.yml fails on the first delete after PR close.
+          "iam:ListInstanceProfilesForRole",
         ]
         Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
       },
