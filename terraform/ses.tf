@@ -28,37 +28,50 @@ resource "aws_sesv2_configuration_set" "outreach" {
   tags = local.common_tags
 }
 
-# Identity for the sender domain. The DKIM tokens become CNAMEs in the parent
-# Route53 zone (added by aws-setup/) — terraform writes them automatically.
+# Domain identity + DKIM/MX/SPF DNS records are domain-level **singletons** —
+# there's only one `outreach.<base_domain>` for the whole project. They live in
+# the production env (skeleton pitfall #10 spirit: per-domain resources can't be
+# per-env or every preview env's apply collides on the same DNS record name).
+# Preview envs reuse the production-registered identity at SES SendEmail time;
+# they have their own configuration set + SNS topic but no identity object.
+
 resource "aws_sesv2_email_identity" "outreach_domain" {
+  count = local.is_production ? 1 : 0
+
   email_identity         = "outreach.${var.base_domain}"
   configuration_set_name = aws_sesv2_configuration_set.outreach.configuration_set_name
   tags                   = local.common_tags
 }
 
 resource "aws_sesv2_email_identity_mail_from_attributes" "outreach_domain" {
-  email_identity         = aws_sesv2_email_identity.outreach_domain.email_identity
+  count = local.is_production ? 1 : 0
+
+  email_identity         = aws_sesv2_email_identity.outreach_domain[0].email_identity
   mail_from_domain       = "mail.outreach.${var.base_domain}"
   behavior_on_mx_failure = "REJECT_MESSAGE"
+  depends_on             = [aws_route53_record.ses_mail_from_mx, aws_route53_record.ses_mail_from_spf]
 }
 
 # DKIM CNAMEs in the project's hosted zone (the agency.<parent> zone created in
-# aws-setup/). Three CNAMEs per identity.
+# aws-setup/). Production-only because the records are domain-singletons.
 data "aws_ssm_parameter" "route53_zone_id" {
   name = "/ai-website-agency/route53/zone_id"
 }
 
 resource "aws_route53_record" "ses_dkim" {
-  count   = 3
+  count = local.is_production ? 3 : 0
+
   zone_id = data.aws_ssm_parameter.route53_zone_id.value
-  name    = "${aws_sesv2_email_identity.outreach_domain.dkim_signing_attributes[0].tokens[count.index]}._domainkey.outreach.${var.base_domain}"
+  name    = "${aws_sesv2_email_identity.outreach_domain[0].dkim_signing_attributes[0].tokens[count.index]}._domainkey.outreach.${var.base_domain}"
   type    = "CNAME"
   ttl     = 600
-  records = ["${aws_sesv2_email_identity.outreach_domain.dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"]
+  records = ["${aws_sesv2_email_identity.outreach_domain[0].dkim_signing_attributes[0].tokens[count.index]}.dkim.amazonses.com"]
 }
 
-# MX + SPF for the MAIL FROM domain.
+# MX + SPF for the MAIL FROM domain (production-only; same singleton reasoning).
 resource "aws_route53_record" "ses_mail_from_mx" {
+  count = local.is_production ? 1 : 0
+
   zone_id = data.aws_ssm_parameter.route53_zone_id.value
   name    = "mail.outreach.${var.base_domain}"
   type    = "MX"
@@ -67,6 +80,8 @@ resource "aws_route53_record" "ses_mail_from_mx" {
 }
 
 resource "aws_route53_record" "ses_mail_from_spf" {
+  count = local.is_production ? 1 : 0
+
   zone_id = data.aws_ssm_parameter.route53_zone_id.value
   name    = "mail.outreach.${var.base_domain}"
   type    = "TXT"
@@ -118,7 +133,9 @@ resource "aws_sns_topic_policy" "ses_feedback" {
   })
 }
 
-# Lambdas need permission to send through this configuration set.
+# Lambdas need permission to send through this configuration set. The identity ARN
+# is constructed as a static string (production-only resource exists, but every env
+# needs the IAM grant so any Lambda can call SendEmail without conditional policies).
 resource "aws_iam_role_policy" "ses_send" {
   name = "ses-send"
   role = aws_iam_role.lambda_api.id
@@ -129,7 +146,8 @@ resource "aws_iam_role_policy" "ses_send" {
         Effect = "Allow"
         Action = ["ses:SendEmail", "ses:SendRawEmail"]
         Resource = [
-          aws_sesv2_email_identity.outreach_domain.arn,
+          # Identity ARN is a global singleton (one outreach.<base_domain> for the project).
+          "arn:aws:ses:${var.aws_region}:${var.aws_account_id}:identity/outreach.${var.base_domain}",
           "arn:aws:ses:${var.aws_region}:${var.aws_account_id}:configuration-set/${aws_sesv2_configuration_set.outreach.configuration_set_name}",
         ]
         Condition = {
@@ -152,8 +170,8 @@ resource "aws_iam_role_policy" "ses_send" {
 }
 
 output "ses_outreach_identity_arn" {
-  value       = aws_sesv2_email_identity.outreach_domain.arn
-  description = "SES identity ARN for outreach.<base_domain>"
+  value       = "arn:aws:ses:${var.aws_region}:${var.aws_account_id}:identity/outreach.${var.base_domain}"
+  description = "SES identity ARN for outreach.<base_domain> (production-registered domain singleton)"
 }
 
 output "ses_feedback_topic_arn" {

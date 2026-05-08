@@ -35,10 +35,15 @@ resource "aws_iam_role" "scheduler_invoke" {
       Effect    = "Allow"
       Principal = { Service = "scheduler.amazonaws.com" }
       Action    = "sts:AssumeRole"
-      # Confused-deputy mitigation: only schedules in our project's group can use this role.
+      # Confused-deputy mitigation: only schedules within our project's scheduler
+      # group (in this account) can assume this role. SourceAccount alone permits
+      # any schedule in the account; SourceArn scopes it to the right group.
       Condition = {
         StringEquals = {
           "aws:SourceAccount" = var.aws_account_id
+        }
+        ArnLike = {
+          "aws:SourceArn" = "arn:aws:scheduler:${var.aws_region}:${var.aws_account_id}:schedule/${aws_scheduler_schedule_group.pipeline.name}/*"
         }
       }
     }]
