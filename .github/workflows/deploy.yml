@@ -12,12 +12,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, closed]
+    # 'closed' deliberately omitted (iter 0.B win #6): destroy.yml handles cleanup.
+    types: [opened, synchronize, reopened]
   create:
 
 concurrency:
-  # PR open/sync cancels prior PR run; PR close (cleanup) is in a different group
-  # because event_name differs, so a fast open→close can't race.
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -45,17 +44,75 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # On branch creation, validate that terraform plan succeeds against the new
-  # env name BEFORE any commits land (catches typos in branch-name-templated
-  # resources before they break the deploy).
+  # Pre-flight: emit path-filter outputs that drive the rest of the pipeline.
+  # Iter 0.B § wins 1, 2, 9. Skips on `create` (branch-create runs provision-branch
+  # instead). On main pushes the filter compares against HEAD~1 → HEAD; on PRs it
+  # compares against the merge-base. On first run with no base, it falls back to
+  # "everything changed" which is the safe default.
+  # ---------------------------------------------------------------------------
+  pre-flight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: github.event_name != 'create'
+    outputs:
+      run:                ${{ steps.run.outputs.run }}
+      frontend_changed:   ${{ steps.filter.outputs.frontend }}
+      lambdas_changed:    ${{ steps.filter.outputs.lambdas }}
+      terraform_changed:  ${{ steps.filter.outputs.terraform }}
+      cloudflare_changed: ${{ steps.filter.outputs.cloudflare }}
+      worker_changed:     ${{ steps.filter.outputs.worker }}
+      code_changed:       ${{ steps.run.outputs.code_changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            lambdas:
+              - 'lambdas/**'
+              - 'scripts/**'
+            terraform:
+              - 'terraform/**'
+              - 'aws-setup/**'
+            cloudflare:
+              - 'cloudflare/**'
+            worker:
+              - 'worker/**'
+      - id: run
+        run: |
+          CC=false
+          for v in '${{ steps.filter.outputs.frontend }}' \
+                   '${{ steps.filter.outputs.lambdas }}' \
+                   '${{ steps.filter.outputs.terraform }}' \
+                   '${{ steps.filter.outputs.cloudflare }}' \
+                   '${{ steps.filter.outputs.worker }}'; do
+            if [ "$v" = "true" ]; then CC=true; fi
+          done
+          echo "code_changed=${CC}" >> "$GITHUB_OUTPUT"
+          echo "run=true"           >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Branch-create gate: validate `terraform plan` against the new env name BEFORE
+  # any commits land. Catches typos in branch-name-templated resources before they
+  # break the deploy.
   # ---------------------------------------------------------------------------
   provision-branch:
     name: Provision Branch Environment
     runs-on: ubuntu-latest
     timeout-minutes: 8
     if: github.event_name == 'create' && github.event.ref_type == 'branch' && github.event.ref != 'main'
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
     steps:
       - uses: actions/checkout@v4
+      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-providers-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-
       - name: Derive env
         run: source ./scripts/derive-env-name.sh
       - name: Create dummy bootstraps for plan
@@ -94,12 +151,16 @@ jobs:
           echo "BFF URL:     https://${ENVIRONMENT}.bff.${PROD_DOMAIN}"
 
   # ---------------------------------------------------------------------------
-  # Quality gate (parallel)
+  # Quality gate (parallel, path-filtered)
+  # Iter 0.B § win 4: lint+test merged into one job per language to share
+  # setup-go / npm-ci / checkout costs.
   # ---------------------------------------------------------------------------
-  lint-go:
+  go-quality:
+    name: Go quality (lint + test)
+    needs: pre-flight
+    if: needs.pre-flight.outputs.lambdas_changed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -117,23 +178,23 @@ jobs:
           version: latest
           working-directory: lambdas
           args: --timeout=5m
+      - name: go test (with coverage)
+        working-directory: lambdas
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: lambdas/coverage.out
+          flags: go
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
 
-  lint-terraform:
+  frontend-quality:
+    name: Frontend quality (lint + test)
+    needs: pre-flight
+    if: needs.pre-flight.outputs.frontend_changed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with: { terraform_version: '${{ env.TF_VERSION }}' }
-      - run: terraform fmt -check -recursive aws-setup terraform
-      - uses: terraform-linters/setup-tflint@v4
-      - run: tflint --recursive
-
-  lint-frontend:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -146,36 +207,6 @@ jobs:
         working-directory: frontend
       - run: npm run format:check
         working-directory: frontend
-
-  test-go-unit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
-      - name: go test (with coverage)
-        working-directory: lambdas
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
-      - uses: codecov/codecov-action@v5
-        if: always()
-        with:
-          files: lambdas/coverage.out
-          flags: go
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
-
-  test-frontend-unit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
-      - run: npm ci
-        working-directory: frontend
       - run: npm run test:coverage
         working-directory: frontend
       - uses: codecov/codecov-action@v5
@@ -186,18 +217,41 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
 
-  # ---------------------------------------------------------------------------
-  # Security gate (parallel)
-  # ---------------------------------------------------------------------------
-  secret-scan:
+  lint-terraform:
+    needs: pre-flight
+    if: needs.pre-flight.outputs.terraform_changed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    timeout-minutes: 10
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      # gitleaks/gitleaks-action requires a paid licence for org repos. Use trufflehog
-      # (Apache-2.0, no licence) for the same coverage on PR diffs and full history.
+      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-providers-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: '${{ env.TF_VERSION }}' }
+      - run: terraform fmt -check -recursive aws-setup terraform
+      - uses: terraform-linters/setup-tflint@v4
+      - run: tflint --recursive
+
+  # ---------------------------------------------------------------------------
+  # Security gate (parallel, runs whenever pipeline runs — small + cheap)
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    needs: pre-flight
+    if: needs.pre-flight.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Iter 0.B § win 7: shallow checkout on PR diffs (trufflehog uses base/head SHAs).
+          # Full history only on push-to-main where there's no PR diff.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 1 || 0 }}
       - uses: trufflesecurity/trufflehog@main
         with:
           path: ./
@@ -205,38 +259,11 @@ jobs:
           head: ${{ github.event.pull_request.head.sha || github.sha }}
           extra_args: --results=verified,unknown
 
-  # CodeQL (sast-go, sast-frontend) requires GitHub Advanced Security on private
-  # repos. Until GHAS is enabled, CodeQL lives only in .github/workflows/security.yml
-  # (advisory, weekly + dep-changed PRs). Re-add gating jobs here when GHAS is on.
-
-  sca:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
-    continue-on-error: true # ADVISORY: govulncheck stdlib findings move faster than Go releases
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
-      - name: govulncheck (advisory)
-        continue-on-error: true
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          cd lambdas && govulncheck ./...
-      - uses: actions/setup-node@v4
-        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
-      - run: npm audit --audit-level=high --omit=dev
-        working-directory: frontend
-        continue-on-error: true # advisory; tighten once baseline is clean
-      - uses: actions/dependency-review-action@v4
-        if: github.event_name == 'pull_request'
-        continue-on-error: true # advisory until GHAS enabled
-        with: { fail-on-severity: high }
-
   iac-scan:
+    needs: pre-flight
+    if: needs.pre-flight.outputs.terraform_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
     steps:
       - uses: actions/checkout@v4
       - uses: bridgecrewio/checkov-action@master
@@ -247,12 +274,11 @@ jobs:
           soft_fail: true # advisory until baseline is clean
           output_format: sarif
           output_file_path: checkov.sarif
-      - uses: aquasecurity/tfsec-action@v1.0.3
-        with:
-          working_directory: terraform
-          soft_fail: true
+      # tfsec dropped (iter 0.B): aquasecurity/tfsec is in maintenance mode (succeeded
+      # by Trivy upstream) and tfsec-action@v1.0.3 fetches its binary anonymously from
+      # the GitHub releases API, hitting the 60/hr rate limit on busy runners. Trivy IaC
+      # coverage lives in security.yml (trivy-fs job).
       # SARIF upload requires GitHub Advanced Security (paid for private repos).
-      # Findings are still surfaced in the job log via Checkov/tfsec text output.
       # Re-enable this step once GHAS is enabled for the repo.
       # - uses: github/codeql-action/upload-sarif@v3
       #   if: always() && hashFiles('checkov.sarif') != ''
@@ -262,9 +288,10 @@ jobs:
   # Build (parallel; depends on quality + security)
   # ---------------------------------------------------------------------------
   discover-lambdas:
+    needs: pre-flight
+    if: needs.pre-flight.outputs.lambdas_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
     outputs:
       go_lambdas: ${{ steps.list.outputs.lambdas }}
       has_go_lambdas: ${{ steps.list.outputs.has }}
@@ -281,11 +308,10 @@ jobs:
           if [ "${ARR}" = "[]" ]; then echo "has=false" >> "$GITHUB_OUTPUT"; else echo "has=true" >> "$GITHUB_OUTPUT"; fi
 
   build-go-lambdas:
-    # sast-go / sca dropped from needs — they're advisory until GHAS is enabled.
-    needs: [discover-lambdas, lint-go, test-go-unit, secret-scan]
+    needs: [pre-flight, discover-lambdas, go-quality, secret-scan]
+    if: needs.discover-lambdas.outputs.has_go_lambdas == 'true' && needs.pre-flight.outputs.lambdas_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: needs.discover-lambdas.outputs.has_go_lambdas == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -335,8 +361,8 @@ jobs:
           if-no-files-found: error
 
   build-frontend:
-    # sast-frontend / sca dropped from needs — they're advisory until GHAS is enabled.
-    needs: [lint-frontend, test-frontend-unit, secret-scan]
+    needs: [pre-flight, frontend-quality, secret-scan]
+    if: needs.pre-flight.outputs.frontend_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -361,15 +387,18 @@ jobs:
     name: Deploy Infrastructure & Frontend
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    needs: [build-go-lambdas, build-frontend, iac-scan]
+    needs: [pre-flight, build-go-lambdas, build-frontend, iac-scan]
     if: |
       always() &&
+      needs.pre-flight.outputs.code_changed == 'true' &&
       (needs.build-go-lambdas.result == 'success' || needs.build-go-lambdas.result == 'skipped') &&
-      needs.build-frontend.result == 'success' &&
+      (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') &&
       (needs.iac-scan.result == 'success' || needs.iac-scan.result == 'skipped') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-       (github.event_name == 'pull_request' && github.event.action != 'closed') ||
+       github.event_name == 'pull_request' ||
        github.event_name == 'workflow_dispatch')
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
     outputs:
       environment:  ${{ steps.env.outputs.environment }}
       is_main:      ${{ steps.env.outputs.is_main }}
@@ -381,9 +410,18 @@ jobs:
       - id: env
         run: source ./scripts/derive-env-name.sh
 
+      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-providers-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-
+
       - uses: actions/download-artifact@v4
+        if: needs.build-go-lambdas.result == 'success'
         with: { pattern: 'lambda-*', merge-multiple: false }
       - uses: actions/download-artifact@v4
+        if: needs.build-frontend.result == 'success'
         with: { name: frontend-dist, path: frontend/dist }
 
       - name: Place Lambda binaries
@@ -395,7 +433,8 @@ jobs:
               chmod +x "$dir/bootstrap"
               rm -rf "lambda-${name}"
             else
-              echo "::warning::No artifact for ${name} — using placeholder"
+              # Lambda matrix was skipped (no lambdas_changed) — keep the placeholder
+              # bootstrap committed in the repo (pitfall #3) so terraform plan succeeds.
               chmod +x "$dir/bootstrap" 2>/dev/null || touch "$dir/bootstrap"
             fi
           done
@@ -409,10 +448,8 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with: { terraform_version: '${{ env.TF_VERSION }}' }
 
-      - name: Terraform fmt (advisory)
-        working-directory: terraform
-        run: terraform fmt -check -recursive
-        continue-on-error: true
+      # `terraform fmt -check` already runs in lint-terraform — dropped here to
+      # avoid the duplicate (12-ci-efficiency.md § Smaller / marginal).
 
       - name: Terraform init
         working-directory: terraform
@@ -453,11 +490,11 @@ jobs:
           echo "frontend_url=${FE_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy frontend (PROD)
-        if: env.IS_MAIN == 'true' && github.event_name == 'push'
+        if: env.IS_MAIN == 'true' && github.event_name == 'push' && needs.build-frontend.result == 'success'
         run: ./scripts/deploy-frontend.sh prod
 
       - name: Deploy frontend (PREVIEW)
-        if: env.IS_MAIN == 'false'
+        if: env.IS_MAIN == 'false' && needs.build-frontend.result == 'success'
         run: ./scripts/deploy-frontend.sh preview "${ENVIRONMENT}"
 
       - name: Sticky PR comment
@@ -481,16 +518,15 @@ jobs:
             <sub>Pushed by @${{ github.actor }} • [run #${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>
 
   # ---------------------------------------------------------------------------
-  # Verify
+  # Verify (gated on code_changed; iter 0.B § win 1)
   # ---------------------------------------------------------------------------
   smoke-tests:
-    needs: deploy
+    needs: [pre-flight, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 6
     if: |
-      always() && needs.deploy.result == 'success' &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+      always() && needs.deploy.result == 'success' && needs.pre-flight.outputs.code_changed == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request')
     steps:
       - uses: actions/checkout@v4
       - name: Wait for endpoints
@@ -500,13 +536,12 @@ jobs:
           ./scripts/wait-for-endpoint.sh "${{ needs.deploy.outputs.frontend_url }}" 200 30 10
 
   post-deploy-seed:
-    needs: deploy
+    needs: [pre-flight, deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: |
-      always() && needs.deploy.result == 'success' &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+      always() && needs.deploy.result == 'success' && needs.pre-flight.outputs.code_changed == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request')
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -521,15 +556,15 @@ jobs:
           E2E_TEST_PASS: ${{ secrets.E2E_TEST_PASS }}
 
   e2e-tests:
-    needs: [deploy, smoke-tests, post-deploy-seed]
+    needs: [pre-flight, deploy, smoke-tests, post-deploy-seed]
     if: |
       always() &&
       needs.deploy.result == 'success' &&
       needs.smoke-tests.result == 'success' &&
       needs.post-deploy-seed.result == 'success' &&
+      needs.pre-flight.outputs.code_changed == 'true' &&
       !inputs.skip_e2e &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request')
     uses: ./.github/workflows/e2e-tests.yml
     with:
       environment: ${{ needs.deploy.outputs.environment }}
@@ -539,15 +574,14 @@ jobs:
     secrets: inherit
 
   dast-zap:
-    needs: [deploy, smoke-tests]
+    needs: [pre-flight, deploy, smoke-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: |
+      github.event_name == 'pull_request' &&
+      (needs.pre-flight.outputs.frontend_changed == 'true' || needs.pre-flight.outputs.terraform_changed == 'true')
     steps:
       - uses: actions/checkout@v4
-      # ZAP baseline is designed to spider an HTML site, so point it at the frontend
-      # (the API root is /health-only and 404s on /). artifact_name must use hyphens
-      # under upload-artifact v4.
       - uses: zaproxy/action-baseline@v0.14.0
         with:
           target: ${{ needs.deploy.outputs.frontend_url }}
@@ -556,10 +590,12 @@ jobs:
           artifact_name: zap-scan-${{ github.run_id }}
 
   accessibility-lighthouse:
-    needs: [deploy, smoke-tests]
+    needs: [pre-flight, deploy, smoke-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: |
+      github.event_name == 'pull_request' &&
+      (needs.pre-flight.outputs.frontend_changed == 'true' || needs.pre-flight.outputs.terraform_changed == 'true')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -574,10 +610,12 @@ jobs:
           || echo "::warning::Lighthouse advisory failures"
 
   load-test-k6:
-    needs: [deploy, smoke-tests]
+    needs: [pre-flight, deploy, smoke-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    if: |
+      github.event_name == 'pull_request' &&
+      (needs.pre-flight.outputs.lambdas_changed == 'true' || needs.pre-flight.outputs.terraform_changed == 'true')
     steps:
       - uses: actions/checkout@v4
       - uses: grafana/k6-action@v0.3.1
@@ -585,4 +623,3 @@ jobs:
           filename: e2e-tests/k6-smoke.js
         env:
           API_URL: ${{ needs.deploy.outputs.api_endpoint }}
-
