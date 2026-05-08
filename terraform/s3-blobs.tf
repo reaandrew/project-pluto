@@ -5,7 +5,7 @@
 # Per-env (preview envs need to destroy on PR close — pitfall #1: force_destroy).
 
 resource "aws_s3_bucket" "pipeline_blobs" {
-  bucket        = "ai-website-agency-blobs${local.env_suffix}-${var.aws_account_id}"
+  bucket        = "ai-website-agency-blobs${local.env_suffix}-${data.aws_caller_identity.current.account_id}"
   force_destroy = !local.is_production
 
   tags = merge(local.common_tags, {

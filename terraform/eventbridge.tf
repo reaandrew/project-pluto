@@ -40,10 +40,10 @@ resource "aws_iam_role" "scheduler_invoke" {
       # any schedule in the account; SourceArn scopes it to the right group.
       Condition = {
         StringEquals = {
-          "aws:SourceAccount" = var.aws_account_id
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
         }
         ArnLike = {
-          "aws:SourceArn" = "arn:aws:scheduler:${var.aws_region}:${var.aws_account_id}:schedule/${aws_scheduler_schedule_group.pipeline.name}/*"
+          "aws:SourceArn" = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.pipeline.name}/*"
         }
       }
     }]
@@ -62,7 +62,7 @@ resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
       Action = ["lambda:InvokeFunction"]
       # Wildcard scoped to project name + this env so future Lambdas (discover,
       # qualifier, etc.) get scheduled invocation for free as we add them.
-      Resource = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:ai-website-agency-*${local.env_suffix}"
+      Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:ai-website-agency-*${local.env_suffix}"
     }]
   })
 }
@@ -85,7 +85,7 @@ resource "aws_scheduler_schedule" "discover_hourly" {
 
   target {
     # Placeholder ARN — replaced by the real discover Lambda ARN in iter 1.3.
-    arn      = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:ai-website-agency-discover${local.env_suffix}"
+    arn      = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:ai-website-agency-discover${local.env_suffix}"
     role_arn = aws_iam_role.scheduler_invoke.arn
 
     retry_policy {
@@ -112,7 +112,7 @@ resource "aws_scheduler_schedule" "tuner_targeting_weekly" {
   }
 
   target {
-    arn      = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:ai-website-agency-tuner-targeting${local.env_suffix}"
+    arn      = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:ai-website-agency-tuner-targeting${local.env_suffix}"
     role_arn = aws_iam_role.scheduler_invoke.arn
 
     retry_policy {
@@ -135,7 +135,7 @@ resource "aws_scheduler_schedule" "tuner_style_weekly" {
   }
 
   target {
-    arn      = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:ai-website-agency-tuner-style${local.env_suffix}"
+    arn      = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:ai-website-agency-tuner-style${local.env_suffix}"
     role_arn = aws_iam_role.scheduler_invoke.arn
 
     retry_policy {
@@ -158,7 +158,7 @@ resource "aws_scheduler_schedule" "tuner_email_tone_weekly" {
   }
 
   target {
-    arn      = "arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:ai-website-agency-tuner-email-tone${local.env_suffix}"
+    arn      = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:ai-website-agency-tuner-email-tone${local.env_suffix}"
     role_arn = aws_iam_role.scheduler_invoke.arn
 
     retry_policy {

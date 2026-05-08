@@ -127,7 +127,7 @@ resource "aws_sns_topic_policy" "ses_feedback" {
       Action    = "SNS:Publish"
       Resource  = aws_sns_topic.ses_feedback.arn
       Condition = {
-        StringEquals = { "aws:SourceAccount" = var.aws_account_id }
+        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
       }
     }]
   })
@@ -147,8 +147,8 @@ resource "aws_iam_role_policy" "ses_send" {
         Action = ["ses:SendEmail", "ses:SendRawEmail"]
         Resource = [
           # Identity ARN is a global singleton (one outreach.<base_domain> for the project).
-          "arn:aws:ses:${var.aws_region}:${var.aws_account_id}:identity/outreach.${var.base_domain}",
-          "arn:aws:ses:${var.aws_region}:${var.aws_account_id}:configuration-set/${aws_sesv2_configuration_set.outreach.configuration_set_name}",
+          "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/outreach.${var.base_domain}",
+          "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:configuration-set/${aws_sesv2_configuration_set.outreach.configuration_set_name}",
         ]
         Condition = {
           StringEquals = {
@@ -170,7 +170,7 @@ resource "aws_iam_role_policy" "ses_send" {
 }
 
 output "ses_outreach_identity_arn" {
-  value       = "arn:aws:ses:${var.aws_region}:${var.aws_account_id}:identity/outreach.${var.base_domain}"
+  value       = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/outreach.${var.base_domain}"
   description = "SES identity ARN for outreach.<base_domain> (production-registered domain singleton)"
 }
 
