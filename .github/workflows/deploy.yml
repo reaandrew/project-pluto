@@ -8,13 +8,16 @@ on:
         required: false
         type: boolean
         default: false
+  # iter 0.B.12 — branch fast lane:
+  #   push to feature branch  → quality + build only (no env, no e2e/dast/lighthouse/k6)
+  #   pull_request open/sync  → full pipeline (deploy + smoke + e2e + dast + lighthouse + k6)
+  #   push to main            → full pipeline against environment=production
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
     branches: [main]
     # 'closed' deliberately omitted (iter 0.B win #6): destroy.yml handles cleanup.
     types: [opened, synchronize, reopened]
-  create:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -45,15 +48,14 @@ permissions:
 jobs:
   # ---------------------------------------------------------------------------
   # Pre-flight: emit path-filter outputs that drive the rest of the pipeline.
-  # Iter 0.B § wins 1, 2, 9. Skips on `create` (branch-create runs provision-branch
-  # instead). On main pushes the filter compares against HEAD~1 → HEAD; on PRs it
-  # compares against the merge-base. On first run with no base, it falls back to
-  # "everything changed" which is the safe default.
+  # Iter 0.B § wins 1, 2, 9 + iter 0.B.12. Fires on every push (any branch) and
+  # every pull_request. On main pushes the filter compares against HEAD~1 → HEAD;
+  # on PRs it compares against the merge-base. On first run with no base, it falls
+  # back to "everything changed" which is the safe default.
   # ---------------------------------------------------------------------------
   pre-flight:
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    if: github.event_name != 'create'
     outputs:
       run:                ${{ steps.run.outputs.run }}
       frontend_changed:   ${{ steps.filter.outputs.frontend }}
@@ -93,62 +95,10 @@ jobs:
           echo "code_changed=${CC}" >> "$GITHUB_OUTPUT"
           echo "run=true"           >> "$GITHUB_OUTPUT"
 
-  # ---------------------------------------------------------------------------
-  # Branch-create gate: validate `terraform plan` against the new env name BEFORE
-  # any commits land. Catches typos in branch-name-templated resources before they
-  # break the deploy.
-  # ---------------------------------------------------------------------------
-  provision-branch:
-    name: Provision Branch Environment
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    if: github.event_name == 'create' && github.event.ref_type == 'branch' && github.event.ref != 'main'
-    env:
-      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
-    steps:
-      - uses: actions/checkout@v4
-      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
-      - uses: actions/cache@v4
-        with:
-          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
-          key: tf-providers-${{ hashFiles('**/.terraform.lock.hcl') }}
-          restore-keys: tf-providers-
-      - name: Derive env
-        run: source ./scripts/derive-env-name.sh
-      - name: Create dummy bootstraps for plan
-        # Pitfall #3: terraform plan references aws_lambda_function.filename = lambdas/foo/bootstrap.
-        # Without dummies, plan fails before the build job has produced binaries.
-        run: |
-          if [ -d lambdas ]; then
-            while IFS= read -r main_go; do
-              touch "$(dirname "$main_go")/bootstrap"
-              chmod +x "$(dirname "$main_go")/bootstrap"
-            done < <(find lambdas -name main.go)
-          fi
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-ai-website-agency-provision-${{ github.run_id }}
-          aws-region: ${{ env.AWS_REGION }}
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-      - name: Terraform init
-        working-directory: terraform
-        run: |
-          terraform init \
-            -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=terraform/ai-website-agency/${ENVIRONMENT}/terraform.tfstate" \
-            -backend-config="region=${AWS_REGION}"
-      - name: Terraform plan (informational)
-        working-directory: terraform
-        run: terraform plan -no-color -input=false -var="environment=${ENVIRONMENT}"
-      - name: Log preview URLs
-        run: |
-          echo "Branch ${GITHUB_REF_NAME} → env ${ENVIRONMENT}"
-          echo "Preview URL: https://${PREVIEW_DOMAIN}/${ENVIRONMENT}/"
-          echo "API URL:     https://api-${ENVIRONMENT}.${PROD_DOMAIN}"
-          echo "BFF URL:     https://${ENVIRONMENT}.bff.${PROD_DOMAIN}"
+  # provision-branch (the previous "validate terraform plan on branch create" job)
+  # was deleted in iter 0.B.12: with `push: branches: ['**']` covering every branch
+  # push, the `create` event no longer fires; env-name template substitution is
+  # validated implicitly by the deploy job on PR open / sync. See spec § 0.B.12.
 
   # ---------------------------------------------------------------------------
   # Quality gate (parallel, path-filtered)

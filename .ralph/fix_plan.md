@@ -36,6 +36,7 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 - [x] **0.B.9** Centralize `if:` logic into the `pre-flight` job's `outputs.run` and have downstream jobs reference `needs.pre-flight.outputs.run == 'true'`.
 - [x] **0.B.10** Add top-level `Makefile` `ci-local` target replicating the gating jobs locally.
 - [ ] **0.B.11** Verify all acceptance criteria in `12-ci-efficiency.md` § "Acceptance for iteration 0.B as a whole" by opening test PRs (doc-only, frontend-only, lambda-only, terraform-only, mixed) and recording wall-clock vs the unmodified skeleton baseline.
+- [x] **0.B.12** Branch fast lane: broaden `deploy.yml` `push` trigger to all branches; gate the heavy chain (deploy / smoke / post-deploy-seed / e2e / dast-zap / lighthouse / k6) on `pull_request` events or `push` to `main` only. Push to a feature branch runs only quality + build (lint, test, scan, compile) — no per-PR ephemeral env until a PR is opened. Drops the obsolete `provision-branch` job (covered by `push: '**'`).
 
 ## High Priority — Iteration 0.C: Agency-specific Terraform
 

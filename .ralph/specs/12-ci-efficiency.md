@@ -125,6 +125,30 @@ All downstream `if:` lines reference `needs.pre-flight.outputs.<name>`. Maintena
 
 **Acceptance**: `if:` clauses on per-job lines are one line each, reading from `pre-flight` outputs.
 
+### 9. Branch fast lane (~5–10 min saved per branch push) — fix_plan 0.B.12
+
+Pushing to a feature branch shouldn't spin up a per-PR ephemeral env. The dev iteration loop is "code → push → wait for lint/test → fix" — the per-PR env exists for *humans reviewing the PR*, not for the developer's own pre-PR feedback.
+
+**Implementation**:
+
+- Broaden the `push` trigger to all branches: `push: { branches: ['**'] }` (was `[main]`).
+- Drop the `create:` event entirely; with `push: '**'` covering every branch's first commit, the `create` event is redundant.
+- Delete the `provision-branch` job (its `if: github.event_name == 'create'` no longer fires; the env-name template substitution is implicitly validated by the deploy job on PR open).
+- Gate the heavy chain on `pull_request` events or `push` to `main` only:
+  - `deploy`, `smoke-tests`, `post-deploy-seed`, `e2e-tests` use:
+    `(github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'`
+  - `dast-zap`, `accessibility-lighthouse`, `load-test-k6` are `pull_request`-only (their value is in PR review, not the developer loop).
+
+What runs on each event after this change:
+
+| Trigger | What runs |
+|---|---|
+| `push` to feature branch | `pre-flight`, `secret-scan`, `go-quality` (if lambdas changed), `frontend-quality` (if frontend changed), `lint-terraform` (if tf changed), `iac-scan` (if tf changed), `discover-lambdas`, `build-go-lambdas`, `build-frontend` |
+| `pull_request` (open / sync) | All of the above + `deploy` + `smoke-tests` + `post-deploy-seed` + `e2e-tests` + `dast-zap` + `accessibility-lighthouse` + `load-test-k6` |
+| `push` to `main` | All of `pull_request` set, applied with `environment=production` |
+
+**Acceptance**: A push to a feature branch produces no `deploy` / `e2e` / `dast` / `lighthouse` / `k6` checks. Opening a PR for that same branch triggers them. Wall-clock for a Go-only branch push is `pre-flight` + `secret-scan` + `go-quality` + `discover-lambdas` + `build-go-lambdas` only — typically < 2 min.
+
 ## Smaller / marginal — implement only if a measurable problem appears
 
 - **Codecov uploads** — `continue-on-error: true` already so they don't block. Async with `& wait` if upload itself shows up in flame graphs.
