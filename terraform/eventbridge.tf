@@ -35,15 +35,19 @@ resource "aws_iam_role" "scheduler_invoke" {
       Effect    = "Allow"
       Principal = { Service = "scheduler.amazonaws.com" }
       Action    = "sts:AssumeRole"
-      # Confused-deputy mitigation: only schedules within our project's scheduler
-      # group (in this account) can assume this role. SourceAccount alone permits
-      # any schedule in the account; SourceArn scopes it to the right group.
+      # Confused-deputy mitigation via SourceAccount.
+      #
+      # The "right" pattern is also ArnLike on aws:SourceArn scoped to
+      #   arn:aws:scheduler:<region>:<acct>:schedule/<group>/*
+      # but AWS Scheduler's CreateSchedule pre-flight validation rejects a
+      # trust policy whose SourceArn refers to a schedule in the very group
+      # the schedule is being created in — chicken-and-egg.
+      # Blast radius is bounded at the policy level instead: the
+      # `scheduler_invoke_lambda` inline policy below restricts the role to
+      # invoking only ai-website-agency-*<env_suffix> Lambdas.
       Condition = {
         StringEquals = {
           "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-        }
-        ArnLike = {
-          "aws:SourceArn" = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/${aws_scheduler_schedule_group.pipeline.name}/*"
         }
       }
     }]
