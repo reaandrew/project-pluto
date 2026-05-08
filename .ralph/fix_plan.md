@@ -167,7 +167,7 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 
 ## Completed
 - [x] Specifications written (`.ralph/specs/`)
-- [x] Repo `reaandrew/ai-ai-website-agency` (spec) created and pushed
+- [x] Repo `reaandrew/ai-website-agency-spec` (spec) created and pushed
 - [x] Repo `reaandrew/cloud-skeleton` made a GitHub template
 
 ## Notes

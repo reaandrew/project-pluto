@@ -161,7 +161,7 @@ cd worker && wrangler deploy --env "${ENV}"
 
 When implementing iteration 0:
 1. Run `bin/init.sh` ONCE on a fresh repo from the template; verify with `--dry-run` first.
-2. Copy `.ralph/` and `CLAUDE.md` from the spec repo (`reaandrew/ai-ai-website-agency`) into the new repo.
+2. Copy `.ralph/` and `CLAUDE.md` from the spec repo (`reaandrew/ai-website-agency-spec`) into the new repo.
 3. Follow `docs/BOOTSTRAP.md` end-to-end (state bucket → first apply → NS records → second apply → verify SSM contract → set secrets → first deploy).
 4. Verify per-PR env works (open + close a no-op PR; cleanup must complete).
 5. Run iteration 0.B (CI efficiency) so subsequent PRs land fast.
