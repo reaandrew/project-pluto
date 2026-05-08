@@ -1,3 +1,5 @@
+// CI-LANE-VALIDATION: no-op marker added to exercise lambdas-changed path filter
+// during iter 0.B PR; reverted before merge.
 package main
 
 import (
