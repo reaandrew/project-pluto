@@ -1,0 +1,58 @@
+name: Security
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # Monday 04:00 UTC
+  pull_request:
+    paths:
+      - '**/go.mod'
+      - '**/go.sum'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - 'lambdas/**'
+      - 'frontend/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # Semgrep replaces CodeQL on this private repo because CodeQL requires GitHub
+  # Advanced Security (paid). Semgrep covers Go + JS/TS + Terraform with a free
+  # OSS ruleset.
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: semgrep ci --config=p/default --config=p/golang --config=p/javascript --config=p/typescript --config=p/terraform
+        env:
+          SEMGREP_RULES: 'p/default p/golang p/javascript p/typescript p/terraform'
+
+  trivy-fs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+  trufflehog-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --results=verified,unknown

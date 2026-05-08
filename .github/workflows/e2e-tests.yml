@@ -1,0 +1,100 @@
+name: E2E Acceptance Tests
+
+on:
+  workflow_call:
+    inputs:
+      environment:  { required: true,  type: string }
+      api_endpoint: { required: true,  type: string }
+      bff_endpoint: { required: true,  type: string }
+      frontend_url: { required: true,  type: string }
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: false
+        default: production
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: e2e-tests-${{ inputs.environment || 'scheduled' }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: 'eu-west-2'
+  NODE_VERSION: '20'
+
+jobs:
+  seed-test-user:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-website-agency-e2eseed-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: bash e2e-tests/scripts/seed-test-user.sh
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          E2E_TEST_USER: ${{ secrets.E2E_TEST_USER }}
+          E2E_TEST_PASS: ${{ secrets.E2E_TEST_PASS }}
+
+  e2e-test:
+    needs: [seed-test-user]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        spec: [health, smoke, auth]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: e2e-tests/package-lock.json
+      - run: npm ci
+        working-directory: e2e-tests
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e-tests
+      - name: Run ${{ matrix.spec }}
+        working-directory: e2e-tests
+        env:
+          BASE_URL: ${{ inputs.frontend_url }}
+          API_URL: ${{ inputs.api_endpoint }}
+          BFF_URL: ${{ inputs.bff_endpoint }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          E2E_TEST_USER: ${{ secrets.E2E_TEST_USER }}
+          E2E_TEST_PASS: ${{ secrets.E2E_TEST_PASS }}
+        run: npx playwright test "tests/${{ matrix.spec }}.spec.ts"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results-${{ matrix.spec }}
+          path: |
+            e2e-tests/test-results/
+            e2e-tests/playwright-report/
+          retention-days: 7
+
+  e2e-cleanup:
+    needs: e2e-test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-website-agency-e2eclean-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: bash e2e-tests/scripts/cleanup-test-data.sh
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}

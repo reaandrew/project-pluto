@@ -1,0 +1,135 @@
+name: Destroy Branch Environment
+
+# Two ways to trigger a destroy:
+#   1. Automatic — when a PR is closed (merged or just closed). The env name
+#      derives from the PR's source branch via scripts/derive-env-name.sh.
+#   2. Manual — via workflow_dispatch. The operator types the exact env name
+#      AND must type the literal string "destroy" as a confirmation. Refuses
+#      to touch production / main / master / prod / develop in either path.
+#
+# Cleanup order (matches deploy.yml's cleanup job):
+#   1. Refuse-to-destroy denylist
+#   2. Create dummy bootstrap files (so terraform plan/destroy can read archive_file)
+#   3. cleanup-environment.sh — empties versioned + multipart S3 objects
+#   4. terraform destroy
+#   5. Remove the per-env tfstate file from S3
+#   6. Clean the preview frontend prefix
+#   7. Sticky PR comment confirming teardown (PR-triggered runs only)
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Sanitised env name (e.g. feat-thing). NEVER production/main/etc.'
+        required: true
+        type: string
+      confirm:
+        description: 'Type the literal word destroy to confirm.'
+        required: true
+        type: string
+
+concurrency:
+  group: destroy-${{ github.event.pull_request.head.ref || github.event.inputs.environment }}
+  cancel-in-progress: false # never cancel a destroy mid-flight
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  TF_VERSION: '1.9.8'
+  AWS_REGION: 'eu-west-2'
+  AWS_ACCOUNT_ID: '276447169330'
+  TF_STATE_BUCKET: 'website-agency-terraform-state-276447169330'
+  PREVIEW_BUCKET: 'website-agency-frontend-preview-shared-276447169330'
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve env name
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.confirm }}" != "destroy" ]]; then
+              echo "::error::confirm input must be the literal word 'destroy'"
+              exit 1
+            fi
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+            echo "ENVIRONMENT=${ENVIRONMENT}" >> "$GITHUB_ENV"
+          else
+            source ./scripts/derive-env-name.sh
+          fi
+          echo "Resolved env: ${ENVIRONMENT}"
+
+      - name: Refuse to destroy protected envs
+        run: |
+          case "${ENVIRONMENT}" in
+            production|main|master|prod|develop|"")
+              echo "::error::Refusing to destroy protected environment '${ENVIRONMENT}'"
+              exit 1 ;;
+          esac
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-website-agency-destroy-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: '${{ env.TF_VERSION }}' }
+
+      - name: Create dummy bootstrap files
+        # Without these, archive_file.api_hello fails on a fresh checkout.
+        run: |
+          if [ -d lambdas ]; then
+            while IFS= read -r main_go; do
+              touch "$(dirname "$main_go")/bootstrap"
+              chmod +x "$(dirname "$main_go")/bootstrap"
+            done < <(find lambdas -name main.go)
+          fi
+
+      - name: Empty S3 buckets
+        # cleanup-environment.sh handles versioned + multipart BEFORE destroy
+        run: ENVIRONMENT="${ENVIRONMENT}" CI=true ./scripts/cleanup-environment.sh
+
+      - name: Terraform init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform destroy
+        working-directory: terraform
+        run: terraform destroy -auto-approve -input=false -var="environment=${ENVIRONMENT}"
+
+      - name: Remove orphan tfstate
+        # Otherwise reusing the same branch name later picks up stale state.
+        run: aws s3 rm "s3://${TF_STATE_BUCKET}/terraform/website-agency/${ENVIRONMENT}/" --recursive
+
+      - name: Clean preview frontend prefix
+        run: aws s3 rm "s3://${PREVIEW_BUCKET}/${ENVIRONMENT}/" --recursive
+
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: deploy-status
+          message: |
+            ### website-agency — environment torn down
+
+            Preview environment `${{ env.ENVIRONMENT }}` destroyed:
+            - Terraform resources: destroyed
+            - tfstate file: removed from S3
+            - Preview frontend prefix: cleaned
+
+            <sub>Triggered by ${{ github.event.pull_request.html_url }} closing.</sub>

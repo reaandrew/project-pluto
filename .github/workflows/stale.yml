@@ -1,0 +1,33 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/stale@v9
+        with:
+          # PR housekeeping — keeps preview env sprawl in check.
+          days-before-pr-stale: 21
+          days-before-pr-close: 9
+          stale-pr-label: stale
+          stale-pr-message: |
+            This PR has been inactive for 21 days. It will be auto-closed in 9 days
+            (which will tear down its preview environment). Reopen or push a commit
+            to keep it alive.
+          close-pr-message: 'Closed due to inactivity. Preview environment will be destroyed.'
+          # Issues
+          days-before-issue-stale: 60
+          days-before-issue-close: 14
+          stale-issue-label: stale
+          exempt-pr-labels: 'pinned,security,no-stale'
+          exempt-issue-labels: 'pinned,security,no-stale,bug'

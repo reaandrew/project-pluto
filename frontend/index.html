@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>website-agency</title>
+    <!-- runtime-config.js is loaded BEFORE the bundle and populates window.__FINANCE_CONFIG__.
+         CI overwrites public/runtime-config.js per environment immediately after `aws s3 sync`,
+         so the same dist/ artifact deploys to every preview env. See docs/ARCHITECTURE.md
+         for why this beats VITE_* build-time bake-in. -->
+    <script src="./runtime-config.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

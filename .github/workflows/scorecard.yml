@@ -1,0 +1,27 @@
+name: OpenSSF Scorecard
+
+# DISABLED on this private repo: scorecard-action needs the GitHub App-installed
+# security feed which isn't available without GHAS, and the GraphQL ListCommits
+# call returns "Resource not accessible by integration". Re-enable as a scheduled
+# job once the repo is either made public or has GHAS enabled.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: ossf/scorecard-action@v2.4.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: false # private repo — cannot publish

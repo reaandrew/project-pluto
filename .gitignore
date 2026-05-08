@@ -1,0 +1,56 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Go
+*.test
+*.out
+coverage.out
+coverage.html
+lambdas/*/bootstrap.real
+# NOTE: lambdas/*/bootstrap is COMMITTED as a placeholder (pitfall #3 — terraform plan
+# needs it to exist on a fresh checkout). CI overwrites it with the real binary.
+
+# Frontend
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+ehthumbs.db
+
+# Playwright
+e2e-tests/test-results/
+e2e-tests/playwright-report/
+e2e-tests/.auth/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local secrets (never commit)
+.env
+secrets/
+*.pem
+*.key

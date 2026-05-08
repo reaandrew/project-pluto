@@ -1,0 +1,588 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_e2e:
+        description: 'Skip E2E tests (emergency deploys only)'
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+  create:
+
+concurrency:
+  # PR open/sync cancels prior PR run; PR close (cleanup) is in a different group
+  # because event_name differs, so a fast open→close can't race.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: '1.9.8'
+  AWS_REGION: 'eu-west-2'
+  GO_VERSION: '1.24.13'
+  NODE_VERSION: '20'
+  AWS_ACCOUNT_ID: '276447169330'
+  PROJECT: 'website-agency'
+  TF_STATE_BUCKET: 'website-agency-terraform-state-276447169330'
+  PREVIEW_BUCKET: 'website-agency-frontend-preview-shared-276447169330'
+  PROD_DOMAIN: 'agency.andrewreaassociates.com'
+  PREVIEW_DOMAIN: 'preview.agency.andrewreaassociates.com'
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  packages: write
+  security-events: write
+  checks: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # On branch creation, validate that terraform plan succeeds against the new
+  # env name BEFORE any commits land (catches typos in branch-name-templated
+  # resources before they break the deploy).
+  # ---------------------------------------------------------------------------
+  provision-branch:
+    name: Provision Branch Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    if: github.event_name == 'create' && github.event.ref_type == 'branch' && github.event.ref != 'main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive env
+        run: source ./scripts/derive-env-name.sh
+      - name: Create dummy bootstraps for plan
+        # Pitfall #3: terraform plan references aws_lambda_function.filename = lambdas/foo/bootstrap.
+        # Without dummies, plan fails before the build job has produced binaries.
+        run: |
+          if [ -d lambdas ]; then
+            while IFS= read -r main_go; do
+              touch "$(dirname "$main_go")/bootstrap"
+              chmod +x "$(dirname "$main_go")/bootstrap"
+            done < <(find lambdas -name main.go)
+          fi
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-website-agency-provision-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: Terraform init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}"
+      - name: Terraform plan (informational)
+        working-directory: terraform
+        run: terraform plan -no-color -input=false -var="environment=${ENVIRONMENT}"
+      - name: Log preview URLs
+        run: |
+          echo "Branch ${GITHUB_REF_NAME} → env ${ENVIRONMENT}"
+          echo "Preview URL: https://${PREVIEW_DOMAIN}/${ENVIRONMENT}/"
+          echo "API URL:     https://api-${ENVIRONMENT}.${PROD_DOMAIN}"
+          echo "BFF URL:     https://${ENVIRONMENT}.bff.${PROD_DOMAIN}"
+
+  # ---------------------------------------------------------------------------
+  # Quality gate (parallel)
+  # ---------------------------------------------------------------------------
+  lint-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
+      - name: gofmt
+        working-directory: lambdas
+        run: |
+          DIFF=$(gofmt -l .)
+          if [ -n "$DIFF" ]; then echo "::error::gofmt diff:" >&2; echo "$DIFF" >&2; exit 1; fi
+      - name: go vet
+        working-directory: lambdas
+        run: go vet ./...
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: lambdas
+          args: --timeout=5m
+
+  lint-terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: '${{ env.TF_VERSION }}' }
+      - run: terraform fmt -check -recursive aws-setup terraform
+      - uses: terraform-linters/setup-tflint@v4
+      - run: tflint --recursive
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      - run: npm run format:check
+        working-directory: frontend
+
+  test-go-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
+      - name: go test (with coverage)
+        working-directory: lambdas
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: lambdas/coverage.out
+          flags: go
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+  test-frontend-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run test:coverage
+        working-directory: frontend
+      - uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Security gate (parallel)
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      # gitleaks/gitleaks-action requires a paid licence for org repos. Use trufflehog
+      # (Apache-2.0, no licence) for the same coverage on PR diffs and full history.
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          extra_args: --results=verified,unknown
+
+  # CodeQL (sast-go, sast-frontend) requires GitHub Advanced Security on private
+  # repos. Until GHAS is enabled, CodeQL lives only in .github/workflows/security.yml
+  # (advisory, weekly + dep-changed PRs). Re-add gating jobs here when GHAS is on.
+
+  sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    continue-on-error: true # ADVISORY: govulncheck stdlib findings move faster than Go releases
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
+      - name: govulncheck (advisory)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd lambdas && govulncheck ./...
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm audit --audit-level=high --omit=dev
+        working-directory: frontend
+        continue-on-error: true # advisory; tighten once baseline is clean
+      - uses: actions/dependency-review-action@v4
+        if: github.event_name == 'pull_request'
+        continue-on-error: true # advisory until GHAS enabled
+        with: { fail-on-severity: high }
+
+  iac-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bridgecrewio/checkov-action@master
+        with:
+          directory: '.'
+          framework: terraform
+          quiet: true
+          soft_fail: true # advisory until baseline is clean
+          output_format: sarif
+          output_file_path: checkov.sarif
+      - uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          soft_fail: true
+      # SARIF upload requires GitHub Advanced Security (paid for private repos).
+      # Findings are still surfaced in the job log via Checkov/tfsec text output.
+      # Re-enable this step once GHAS is enabled for the repo.
+      # - uses: github/codeql-action/upload-sarif@v3
+      #   if: always() && hashFiles('checkov.sarif') != ''
+      #   with: { sarif_file: checkov.sarif }
+
+  # ---------------------------------------------------------------------------
+  # Build (parallel; depends on quality + security)
+  # ---------------------------------------------------------------------------
+  discover-lambdas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: github.event_name != 'create' && (github.event.action != 'closed' || github.event_name != 'pull_request')
+    outputs:
+      go_lambdas: ${{ steps.list.outputs.lambdas }}
+      has_go_lambdas: ${{ steps.list.outputs.has }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          if [ -d lambdas ]; then
+            ARR=$(find lambdas -mindepth 2 -maxdepth 2 -name main.go -printf '%h\n' | jq -R . | jq -sc .)
+          else
+            ARR='[]'
+          fi
+          echo "lambdas=${ARR}" >> "$GITHUB_OUTPUT"
+          if [ "${ARR}" = "[]" ]; then echo "has=false" >> "$GITHUB_OUTPUT"; else echo "has=true" >> "$GITHUB_OUTPUT"; fi
+
+  build-go-lambdas:
+    # sast-go / sca dropped from needs — they're advisory until GHAS is enabled.
+    needs: [discover-lambdas, lint-go, test-go-unit, secret-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: needs.discover-lambdas.outputs.has_go_lambdas == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        lambda: ${{ fromJson(needs.discover-lambdas.outputs.go_lambdas) }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: name
+        run: echo "name=$(basename '${{ matrix.lambda }}')" >> "$GITHUB_OUTPUT"
+      - id: key
+        # Pitfall #2: hash this lambda + lambdas/pkg + go.mod/sum + any local replace targets.
+        run: |
+          DEPS=""
+          if [ -f "${{ matrix.lambda }}/go.mod" ]; then
+            while IFS= read -r dep; do
+              rel=$(echo "$dep" | sed -E 's/.*=>[[:space:]]*//; s/[[:space:]]+v[^[:space:]]+$//')
+              [ -z "$rel" ] && continue
+              abs=$(cd "${{ matrix.lambda }}" && cd "$rel" 2>/dev/null && pwd || true)
+              [ -n "$abs" ] && DEPS+=" $abs"
+            done < <(grep -E '^\s*replace\s' "${{ matrix.lambda }}/go.mod" || true)
+          fi
+          HASH=$(cat \
+            $(find ${{ matrix.lambda }} $DEPS -name "*.go" 2>/dev/null | sort) \
+            $(find lambdas/pkg -name "*.go" 2>/dev/null | sort) \
+            lambdas/go.mod lambdas/go.sum 2>/dev/null \
+            | sha256sum | cut -d' ' -f1)
+          echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ matrix.lambda }}/bootstrap
+          key: lambda-${{ steps.name.outputs.name }}-go${{ env.GO_VERSION }}-${{ steps.key.outputs.hash }}
+      - uses: actions/setup-go@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cd "${{ matrix.lambda }}"
+          export GOPROXY=https://proxy.golang.org,direct
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -ldflags="-s -w" -o bootstrap .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-${{ steps.name.outputs.name }}
+          path: ${{ matrix.lambda }}/bootstrap
+          retention-days: 1
+          if-no-files-found: error
+
+  build-frontend:
+    # sast-frontend / sca dropped from needs — they're advisory until GHAS is enabled.
+    needs: [lint-frontend, test-frontend-unit, secret-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Deploy
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy Infrastructure & Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [build-go-lambdas, build-frontend, iac-scan]
+    if: |
+      always() &&
+      (needs.build-go-lambdas.result == 'success' || needs.build-go-lambdas.result == 'skipped') &&
+      needs.build-frontend.result == 'success' &&
+      (needs.iac-scan.result == 'success' || needs.iac-scan.result == 'skipped') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.action != 'closed') ||
+       github.event_name == 'workflow_dispatch')
+    outputs:
+      environment:  ${{ steps.env.outputs.environment }}
+      is_main:      ${{ steps.env.outputs.is_main }}
+      api_endpoint: ${{ steps.urls.outputs.api_endpoint }}
+      bff_endpoint: ${{ steps.urls.outputs.bff_endpoint }}
+      frontend_url: ${{ steps.urls.outputs.frontend_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: env
+        run: source ./scripts/derive-env-name.sh
+
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'lambda-*', merge-multiple: false }
+      - uses: actions/download-artifact@v4
+        with: { name: frontend-dist, path: frontend/dist }
+
+      - name: Place Lambda binaries
+        run: |
+          find lambdas -name main.go 2>/dev/null | while read -r main; do
+            dir=$(dirname "$main"); name=$(basename "$dir")
+            if [ -f "lambda-${name}/bootstrap" ]; then
+              mv "lambda-${name}/bootstrap" "$dir/bootstrap"
+              chmod +x "$dir/bootstrap"
+              rm -rf "lambda-${name}"
+            else
+              echo "::warning::No artifact for ${name} — using placeholder"
+              chmod +x "$dir/bootstrap" 2>/dev/null || touch "$dir/bootstrap"
+            fi
+          done
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-website-agency-deploy-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: '${{ env.TF_VERSION }}' }
+
+      - name: Terraform fmt (advisory)
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform validate
+        working-directory: terraform
+        run: terraform validate -no-color
+
+      - name: Terraform plan (PR only)
+        id: plan
+        working-directory: terraform
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          terraform plan -no-color -input=false \
+            -var="environment=${ENVIRONMENT}" \
+            -out=tfplan 2>&1 | tee plan.txt
+          terraform show -no-color tfplan > plan-summary.txt
+
+      - name: Terraform apply
+        working-directory: terraform
+        run: terraform apply -auto-approve -input=false -var="environment=${ENVIRONMENT}"
+
+      - name: Capture endpoints
+        id: urls
+        working-directory: terraform
+        run: |
+          API_DOMAIN=$(terraform output -raw api_custom_domain)
+          BFF_URL=$(terraform output -raw bff_url)
+          FE_URL=$(terraform output -raw frontend_url)
+          echo "api_endpoint=${API_DOMAIN}" >> "$GITHUB_OUTPUT"
+          echo "bff_endpoint=${BFF_URL}" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=${FE_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy frontend (PROD)
+        if: env.IS_MAIN == 'true' && github.event_name == 'push'
+        run: ./scripts/deploy-frontend.sh prod
+
+      - name: Deploy frontend (PREVIEW)
+        if: env.IS_MAIN == 'false'
+        run: ./scripts/deploy-frontend.sh preview "${ENVIRONMENT}"
+
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: deploy-status
+          message: |
+            ### website-agency deploy — `${{ env.ENVIRONMENT }}`
+
+            | Stage | Status |
+            |-------|--------|
+            | Terraform plan  | `${{ steps.plan.outcome || 'skipped' }}` |
+            | Terraform apply | success |
+
+            **Frontend:** ${{ steps.urls.outputs.frontend_url }}
+            **API:** ${{ steps.urls.outputs.api_endpoint }}
+            **BFF:** ${{ steps.urls.outputs.bff_endpoint }}
+            **Commit:** `${{ github.sha }}`
+
+            <sub>Pushed by @${{ github.actor }} • [run #${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>
+
+  # ---------------------------------------------------------------------------
+  # Verify
+  # ---------------------------------------------------------------------------
+  smoke-tests:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    if: |
+      always() && needs.deploy.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for endpoints
+        run: |
+          ./scripts/wait-for-endpoint.sh "${{ needs.deploy.outputs.api_endpoint }}/health" 200 30 10
+          ./scripts/wait-for-endpoint.sh "${{ needs.deploy.outputs.bff_endpoint }}/health" 200 30 10
+          ./scripts/wait-for-endpoint.sh "${{ needs.deploy.outputs.frontend_url }}" 200 30 10
+
+  post-deploy-seed:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: |
+      always() && needs.deploy.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-website-agency-seed-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: ./scripts/seed-environment-users.sh
+        env:
+          ENVIRONMENT: ${{ needs.deploy.outputs.environment }}
+          E2E_TEST_USER: ${{ secrets.E2E_TEST_USER }}
+          E2E_TEST_PASS: ${{ secrets.E2E_TEST_PASS }}
+
+  e2e-tests:
+    needs: [deploy, smoke-tests, post-deploy-seed]
+    if: |
+      always() &&
+      needs.deploy.result == 'success' &&
+      needs.smoke-tests.result == 'success' &&
+      needs.post-deploy-seed.result == 'success' &&
+      !inputs.skip_e2e &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+    uses: ./.github/workflows/e2e-tests.yml
+    with:
+      environment: ${{ needs.deploy.outputs.environment }}
+      api_endpoint: ${{ needs.deploy.outputs.api_endpoint }}
+      bff_endpoint: ${{ needs.deploy.outputs.bff_endpoint }}
+      frontend_url: ${{ needs.deploy.outputs.frontend_url }}
+    secrets: inherit
+
+  dast-zap:
+    needs: [deploy, smoke-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      # ZAP baseline is designed to spider an HTML site, so point it at the frontend
+      # (the API root is /health-only and 404s on /). artifact_name must use hyphens
+      # under upload-artifact v4.
+      - uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ needs.deploy.outputs.frontend_url }}
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-scan-${{ github.run_id }}
+
+  accessibility-lighthouse:
+    needs: [deploy, smoke-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - run: npm install -g @lhci/cli@0.14.0
+      - name: Lighthouse CI
+        run: |
+          lhci autorun \
+            --collect.url='${{ needs.deploy.outputs.frontend_url }}' \
+            --upload.target=temporary-public-storage \
+            --collect.numberOfRuns=1 \
+          || echo "::warning::Lighthouse advisory failures"
+
+  load-test-k6:
+    needs: [deploy, smoke-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/k6-action@v0.3.1
+        with:
+          filename: e2e-tests/k6-smoke.js
+        env:
+          API_URL: ${{ needs.deploy.outputs.api_endpoint }}
+
