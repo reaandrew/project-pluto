@@ -55,19 +55,19 @@ variable "aws_account_id" {
 
 variable "base_domain" {
   type        = string
-  default     = "agency.andrewreaassociates.com"
-  description = "Hosted zone for this project. NS records are delegated from andrewreaassociates.com."
+  default     = "agency.techar.ch"
+  description = "Hosted zone for this project. NS records are delegated from techar.ch."
 }
 
 variable "parent_domain" {
   type        = string
-  default     = "andrewreaassociates.com"
+  default     = "techar.ch"
   description = "Parent domain — informational only, used for delegation_instructions output"
 }
 
 variable "github_org" {
   type        = string
-  default     = "andrewreaassociates.com"
+  default     = "techar.ch"
   description = "GitHub org — constrains the OIDC trust policy"
 }
 
@@ -164,7 +164,7 @@ resource "aws_iam_role_policy" "s3_access" {
   })
 }
 
-# 2. Route53 — agency.andrewreaassociates.com zone only (zone-id is set after the zone
+# 2. Route53 — agency.techar.ch zone only (zone-id is set after the zone
 #    is created; we use a wildcard on the resource arn for simplicity, but
 #    the action set is read-only-or-record-CRUD, never zone deletion).
 resource "aws_iam_role_policy" "route53_access" {

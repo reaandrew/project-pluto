@@ -124,7 +124,7 @@ All items have `type`, `createdAt`, `updatedAt`, `etag` (`uuid` mutated on each 
     "Hi {{firstName}} — saw {{businessName}} listed in {{location}}."
   ],
   "prohibitedPhrases": ["industry-leading", "best-in-class", "as you requested"],
-  "signature": "Andrew\nAndrew Rea Associates\nhttps://andrewreaassociates.com",
+  "signature": "Andrew\nAndrew Rea Associates\nhttps://techar.ch",
   "optOutLine": "Reply 'no thanks' and I won't follow up.",
   "version": 3,
   "createdAt": "...",

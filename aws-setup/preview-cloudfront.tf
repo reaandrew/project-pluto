@@ -1,4 +1,4 @@
-# Preview frontend — preview.agency.andrewreaassociates.com → SHARED S3 with path-prefix routing.
+# Preview frontend — preview.agency.techar.ch → SHARED S3 with path-prefix routing.
 # Lambda@Edge inspects the request URI and routes /<env>/<path> to S3 path /<env>/<path>.
 # This means PR open/close never touches CloudFront — only S3 sync + Route53 stays unchanged.
 

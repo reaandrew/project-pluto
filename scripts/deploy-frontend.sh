@@ -16,7 +16,7 @@ set -euo pipefail
 MODE="${1:?usage: deploy-frontend.sh <prod|preview> [env]}"
 ENV_NAME="${2:-production}"
 DIST_DIR="${DIST_DIR:-frontend/dist}"
-BASE_DOMAIN="${BASE_DOMAIN:-agency.andrewreaassociates.com}"
+BASE_DOMAIN="${BASE_DOMAIN:-agency.techar.ch}"
 
 if [[ ! -d "${DIST_DIR}" ]]; then
   echo "::error::DIST_DIR ${DIST_DIR} does not exist; did the build job upload the artifact?"

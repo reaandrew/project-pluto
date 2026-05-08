@@ -1,5 +1,5 @@
-# Auto-delegation: parent andrewreaassociates.com zone is in the same AWS account, so we add
-# the NS records for agency.andrewreaassociates.com automatically. This makes bootstrap a
+# Auto-delegation: parent techar.ch zone is in the same AWS account, so we add
+# the NS records for agency.techar.ch automatically. This makes bootstrap a
 # single `terraform apply` instead of the two-step apply-Ctrl-C-add-NS-apply
 # dance described in tripwire/smm runbooks.
 #

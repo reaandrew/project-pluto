@@ -8,17 +8,17 @@ output "api_endpoint" {
 }
 
 output "api_custom_domain" {
-  description = "Custom domain for the API: https://api[.|-<env>].agency.andrewreaassociates.com"
+  description = "Custom domain for the API: https://api[.|-<env>].agency.techar.ch"
   value       = "https://${local.api_domain}"
 }
 
 output "bff_url" {
-  description = "BFF URL — production: bff.agency.andrewreaassociates.com, preview: <env>.bff.agency.andrewreaassociates.com"
+  description = "BFF URL — production: bff.agency.techar.ch, preview: <env>.bff.agency.techar.ch"
   value       = "https://${local.bff_domain}"
 }
 
 output "frontend_url" {
-  description = "Frontend URL — production: agency.andrewreaassociates.com, preview: preview.agency.andrewreaassociates.com/<env>/"
+  description = "Frontend URL — production: agency.techar.ch, preview: preview.agency.techar.ch/<env>/"
   value       = local.frontend_url
 }
 

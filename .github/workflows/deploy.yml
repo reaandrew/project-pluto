@@ -30,8 +30,8 @@ env:
   PROJECT: 'ai-website-agency'
   TF_STATE_BUCKET: 'ai-website-agency-terraform-state-276447169330'
   PREVIEW_BUCKET: 'ai-website-agency-frontend-preview-shared-276447169330'
-  PROD_DOMAIN: 'agency.andrewreaassociates.com'
-  PREVIEW_DOMAIN: 'preview.agency.andrewreaassociates.com'
+  PROD_DOMAIN: 'agency.techar.ch'
+  PREVIEW_DOMAIN: 'preview.agency.techar.ch'
 
 permissions:
   id-token: write

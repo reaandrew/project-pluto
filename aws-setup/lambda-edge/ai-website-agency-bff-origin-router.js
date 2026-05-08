@@ -5,8 +5,8 @@
 // viewer-request) and rewrites the origin to the matching per-branch API GW custom
 // domain.
 //
-//   bff.agency.andrewreaassociates.com          → api.agency.andrewreaassociates.com          (production, defensive)
-//   <env>.bff.agency.andrewreaassociates.com    → api-<env>.agency.andrewreaassociates.com     (preview)
+//   bff.agency.techar.ch          → api.agency.techar.ch          (production, defensive)
+//   <env>.bff.agency.techar.ch    → api-<env>.agency.techar.ch     (preview)
 //
 // We MUST read x-original-host because by origin-request time CloudFront has already
 // overwritten the Host header with the (placeholder) origin domain.
@@ -23,7 +23,7 @@ exports.handler = async (event) => {
         '';
 
     // Defensive — if we somehow get the production host on this distribution, just pass through.
-    if (originalHost === 'bff.agency.andrewreaassociates.com') {
+    if (originalHost === 'bff.agency.techar.ch') {
         return request;
     }
 
@@ -38,7 +38,7 @@ exports.handler = async (event) => {
     }
 
     const env = m[1];
-    const apiHost = 'api-' + env + '.agency.andrewreaassociates.com';
+    const apiHost = 'api-' + env + '.agency.techar.ch';
 
     request.origin = {
         custom: {

@@ -8,7 +8,7 @@ output "route53_zone_id" {
 }
 
 output "route53_nameservers" {
-  description = "Nameservers for agency.andrewreaassociates.com. Add these as NS records in the parent andrewreaassociates.com zone."
+  description = "Nameservers for agency.techar.ch. Add these as NS records in the parent techar.ch zone."
   value       = aws_route53_zone.ai-website-agency.name_servers
 }
 

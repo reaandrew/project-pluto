@@ -1,13 +1,13 @@
 # Two ACM certificates with identical SANs:
 #   - eu-west-2 cert is consumed by API Gateway v2 custom domains (REGIONAL endpoint)
 #   - us-east-1 cert is consumed by CloudFront (must live in us-east-1)
-# Both cover the apex, *.agency.andrewreaassociates.com, and *.bff.agency.andrewreaassociates.com
+# Both cover the apex, *.agency.techar.ch, and *.bff.agency.techar.ch
 # so per-branch envs get api-<env>.… and <env>.bff.… for free.
 
 locals {
   cert_san = [
-    var.base_domain,            # agency.andrewreaassociates.com
-    "*.bff.${var.base_domain}", # <env>.bff.agency.andrewreaassociates.com
+    var.base_domain,            # agency.techar.ch
+    "*.bff.${var.base_domain}", # <env>.bff.agency.techar.ch
   ]
 }
 

@@ -42,7 +42,7 @@ git push -u origin main
 
 ### What `init.sh` does (verified end-to-end)
 
-- Replaces `ai-website-agency` → your project, `276447169330` → your account, `agency.andrewreaassociates.com` → your domain, `reaandrew/ai-website-agency` → your org/repo, `personal_iphone` → your aws-vault profile, and rewrites the Go module path.
+- Replaces `ai-website-agency` → your project, `276447169330` → your account, `agency.techar.ch` → your domain, `reaandrew/ai-website-agency` → your org/repo, `personal_iphone` → your aws-vault profile, and rewrites the Go module path.
 - Substitutes across every `.tf`, `.go`, `.yml`, `.md`, `.ts`, `.tsx`, `.js`, `.json`, `.sh`, `go.mod`, `package.json`, `package-lock.json`, `.gitignore` file in the repo (excluding `.git`, `node_modules`, `.terraform`, `frontend/dist`, the placeholder bootstrap binary, and `bin/init.sh` itself).
 - Tested on a throwaway copy: 38/75 files substituted, **zero residual `ai-website-agency` / `levantar` / `276447169330` references** left in any source file.
 - Re-initialises git history with a single `Initial commit from cloud-skeleton template` so each new project starts clean.
@@ -91,4 +91,4 @@ bin/init.sh   — template customiser; delete after running
 
 ## Provenance
 
-Hardened by repeated production use (this is bootstrap attempt #6 across the andrewreaassociates.com org). The reference implementation lives at `reaandrew/ai-website-agency`.
+Hardened by repeated production use (this is bootstrap attempt #6 across the techar.ch org). The reference implementation lives at `reaandrew/ai-website-agency`.

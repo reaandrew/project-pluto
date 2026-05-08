@@ -3,7 +3,7 @@
 // Lambda@Edge — origin-request handler for the preview frontend distribution.
 // Adapted from smm/aws-setup/cloudfront-origin-router/index.js.
 //
-// Traffic comes in as preview.agency.andrewreaassociates.com/<env>/<rest>.
+// Traffic comes in as preview.agency.techar.ch/<env>/<rest>.
 // We need to rewrite the origin S3 path so /<env>/<rest> is served from
 // s3://ai-website-agency-frontend-preview-shared/<env>/<rest>.
 // AND fall back to /<env>/index.html for client-side routing.

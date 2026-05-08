@@ -46,7 +46,7 @@ variable "environment" {
 
 variable "base_domain" {
   type        = string
-  default     = "agency.andrewreaassociates.com"
+  default     = "agency.techar.ch"
   description = "Project domain — read into local.api_domain etc."
 }
 

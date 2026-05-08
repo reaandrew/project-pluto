@@ -38,9 +38,9 @@
                     └──────────────────┘
 
 Singletons (one copy in aws-setup/):
-  - hosted zone agency.andrewreaassociates.com
-  - ACM cert wildcard *.agency.andrewreaassociates.com (one in eu-west-2 for API GW, one in
-    us-east-1 for CloudFront; both also cover *.bff.agency.andrewreaassociates.com)
+  - hosted zone agency.techar.ch
+  - ACM cert wildcard *.agency.techar.ch (one in eu-west-2 for API GW, one in
+    us-east-1 for CloudFront; both also cover *.bff.agency.techar.ch)
   - 3× CloudFront distributions (prod-fe, preview-fe, bff)
   - OIDC provider for GitHub Actions
   - GitHub Actions IAM role github-actions-ai-website-agency
@@ -83,4 +83,4 @@ Singletons (one copy in aws-setup/):
 
 **`vite.config.ts` `base: './'` is load-bearing.** With `base: '/'` (the default) the bundle requests `/assets/index-abc.js`, which the path-prefix preview can't resolve. Relative paths let the same `dist/` work under both `/` (production) and `/<env>/` (preview).
 
-**BFF distribution uses Lambda@Edge for preview, not for production.** The production BFF distribution has a fixed origin (`api.agency.andrewreaassociates.com`); no edge function. The preview BFF distribution (`*.bff.agency.andrewreaassociates.com`) uses a CloudFront Function on viewer-request to stamp `x-original-host`, then a Lambda@Edge on origin-request to inspect that header and rewrite the origin to `api-<env>.agency.andrewreaassociates.com`. This way one distribution serves every preview branch without touching CloudFront on PR open/close.
+**BFF distribution uses Lambda@Edge for preview, not for production.** The production BFF distribution has a fixed origin (`api.agency.techar.ch`); no edge function. The preview BFF distribution (`*.bff.agency.techar.ch`) uses a CloudFront Function on viewer-request to stamp `x-original-host`, then a Lambda@Edge on origin-request to inspect that header and rewrite the origin to `api-<env>.agency.techar.ch`. This way one distribution serves every preview branch without touching CloudFront on PR open/close.

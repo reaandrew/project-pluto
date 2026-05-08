@@ -1,10 +1,10 @@
 # Two BFF distributions:
-#   - bff_production: bff.agency.andrewreaassociates.com, fixed origin api.agency.andrewreaassociates.com.
+#   - bff_production: bff.agency.techar.ch, fixed origin api.agency.techar.ch.
 #     CloudFront Function on viewer-request transforms cookie → Authorization header.
 #     No Lambda@Edge (origin is fixed).
-#   - bff_preview: *.bff.agency.andrewreaassociates.com, the same CloudFront Function PLUS a
+#   - bff_preview: *.bff.agency.techar.ch, the same CloudFront Function PLUS a
 #     Lambda@Edge on origin-request that reads x-original-host (stamped by the CFFn)
-#     and rewrites the origin to api-<env>.agency.andrewreaassociates.com.
+#     and rewrites the origin to api-<env>.agency.techar.ch.
 
 # CloudFront Function — viewer-request handler.
 resource "aws_cloudfront_function" "cookie_to_auth" {

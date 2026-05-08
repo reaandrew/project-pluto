@@ -1,4 +1,4 @@
-# Production frontend: agency.andrewreaassociates.com → S3 (ai-website-agency-frontend-production) via OAC.
+# Production frontend: agency.techar.ch → S3 (ai-website-agency-frontend-production) via OAC.
 # NOT force_destroy — manual gate; this is the only prod frontend artifact.
 
 resource "aws_s3_bucket" "frontend_production" {
