@@ -18,7 +18,37 @@ permissions:
   security-events: write
   actions: read
 
+env:
+  GO_VERSION: '1.24.13'
+  NODE_VERSION: '20'
+
 jobs:
+  # iter 0.B § win 3: moved off the per-PR critical path of deploy.yml. Runs
+  # only on dep-manifest changes, weekly cron, and manual dispatch — not on
+  # every PR. All checks are advisory until GHAS is enabled.
+  sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true # ADVISORY: govulncheck stdlib findings move faster than Go releases
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: lambdas/go.sum }
+      - name: govulncheck (advisory)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd lambdas && govulncheck ./...
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm audit --audit-level=high --omit=dev
+        working-directory: frontend
+        continue-on-error: true
+      - uses: actions/dependency-review-action@v4
+        if: github.event_name == 'pull_request'
+        continue-on-error: true # advisory until GHAS enabled
+        with: { fail-on-severity: high }
+
   # Semgrep replaces CodeQL on this private repo because CodeQL requires GitHub
   # Advanced Security (paid). Semgrep covers Go + JS/TS + Terraform with a free
   # OSS ruleset.

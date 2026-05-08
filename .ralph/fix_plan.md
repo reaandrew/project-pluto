@@ -25,16 +25,16 @@ Marking convention: `[ ]` not done, `[~]` in progress, `[x]` done.
 
 Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/deploy.yml` (and `security.yml`) before adding any agency-specific resources to `terraform/`. Doing this first means every subsequent iteration's PR pipeline is fast.
 
-- [ ] **0.B.1** Add `pre-flight` job to `deploy.yml` emitting `frontend_changed`, `lambdas_changed`, `terraform_changed`, `cloudflare_changed`, `worker_changed`, `code_changed`, `run` (via `dorny/paths-filter@v3`).
-- [ ] **0.B.2** Gate `deploy`, `smoke-tests`, `post-deploy-seed`, `e2e-tests`, `dast-zap`, `accessibility-lighthouse`, `load-test-k6` on `code_changed == 'true'` (doc-only PR fast lane).
-- [ ] **0.B.3** Path-filter the heavy jobs per the table in `12-ci-efficiency.md` § Win 2.
-- [ ] **0.B.4** Move `sca` to `security.yml` (weekly cron + on `**/go.mod`/`**/package*.json` changes + manual). Keep `iac-scan` in `deploy.yml` but gated on `terraform_changed`.
-- [ ] **0.B.5** Merge `lint-go` + `test-go-unit` into one `go-quality` job. Merge `lint-frontend` + `test-frontend-unit` into one `frontend-quality` job.
-- [ ] **0.B.6** Cache Terraform providers via `TF_PLUGIN_CACHE_DIR` + `actions/cache@v4` keyed on `**/.terraform.lock.hcl` in every job that runs `terraform init`.
-- [ ] **0.B.7** Drop `closed` from `deploy.yml`'s `pull_request: types`. Remove now-redundant `action != 'closed'` clauses from per-job `if:`.
-- [ ] **0.B.8** Shallow checkout (`fetch-depth: 1`) for `secret-scan` on PRs (uses `base`/`head` SHAs).
-- [ ] **0.B.9** Centralize `if:` logic into the `pre-flight` job's `outputs.run` and have downstream jobs reference `needs.pre-flight.outputs.run == 'true'`.
-- [ ] **0.B.10** Add top-level `Makefile` `ci-local` target replicating the gating jobs locally.
+- [x] **0.B.1** Add `pre-flight` job to `deploy.yml` emitting `frontend_changed`, `lambdas_changed`, `terraform_changed`, `cloudflare_changed`, `worker_changed`, `code_changed`, `run` (via `dorny/paths-filter@v3`).
+- [x] **0.B.2** Gate `deploy`, `smoke-tests`, `post-deploy-seed`, `e2e-tests`, `dast-zap`, `accessibility-lighthouse`, `load-test-k6` on `code_changed == 'true'` (doc-only PR fast lane).
+- [x] **0.B.3** Path-filter the heavy jobs per the table in `12-ci-efficiency.md` § Win 2.
+- [x] **0.B.4** Move `sca` to `security.yml` (weekly cron + on `**/go.mod`/`**/package*.json` changes + manual). Keep `iac-scan` in `deploy.yml` but gated on `terraform_changed`. Also dropped `aquasecurity/tfsec-action@v1.0.3` (deprecated upstream + GitHub-API rate-limit on its anonymous binary download); Trivy in `security.yml` covers IaC scanning.
+- [x] **0.B.5** Merge `lint-go` + `test-go-unit` into one `go-quality` job. Merge `lint-frontend` + `test-frontend-unit` into one `frontend-quality` job.
+- [x] **0.B.6** Cache Terraform providers via `TF_PLUGIN_CACHE_DIR` + `actions/cache@v4` keyed on `**/.terraform.lock.hcl` in every job that runs `terraform init` (`provision-branch`, `lint-terraform`, `deploy`).
+- [x] **0.B.7** Drop `closed` from `deploy.yml`'s `pull_request: types`. Remove now-redundant `action != 'closed'` clauses from per-job `if:`.
+- [x] **0.B.8** Shallow checkout (`fetch-depth: 1`) for `secret-scan` on PRs (uses `base`/`head` SHAs).
+- [x] **0.B.9** Centralize `if:` logic into the `pre-flight` job's `outputs.run` and have downstream jobs reference `needs.pre-flight.outputs.run == 'true'`.
+- [x] **0.B.10** Add top-level `Makefile` `ci-local` target replicating the gating jobs locally.
 - [ ] **0.B.11** Verify all acceptance criteria in `12-ci-efficiency.md` § "Acceptance for iteration 0.B as a whole" by opening test PRs (doc-only, frontend-only, lambda-only, terraform-only, mixed) and recording wall-clock vs the unmodified skeleton baseline.
 
 ## High Priority — Iteration 0.C: Agency-specific Terraform

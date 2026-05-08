@@ -1,3 +1,5 @@
+// CI-LANE-VALIDATION: no-op marker added to exercise frontend-changed path filter
+// during iter 0.B PR; reverted before merge.
 import Hello from './pages/Hello';
 import { ENV } from './api';
 
