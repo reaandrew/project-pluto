@@ -54,3 +54,20 @@ npm-debug.log*
 secrets/
 *.pem
 *.key
+
+# Ralph runtime state (regenerated each loop; never commit)
+.ralph/.call_count
+.ralph/.circuit_breaker_history
+.ralph/.circuit_breaker_state
+.ralph/.exit_signals
+.ralph/.last_reset
+.ralph/.loop_start_sha
+.ralph/.ralph_session
+.ralph/.ralph_session_history
+.ralph/.token_count
+.ralph/progress.json
+.ralph/status.json
+.ralph/live.log
+.ralph/logs/
+.ralph/docs/generated/
+.ralph/.session/

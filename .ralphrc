@@ -1,0 +1,55 @@
+# .ralphrc - Ralph project configuration for website-agency
+# Documentation: https://github.com/frankbria/ralph-claude-code
+
+# =============================================================================
+# PROJECT IDENTIFICATION
+# =============================================================================
+
+PROJECT_NAME="${PROJECT_NAME:-website-agency}"
+PROJECT_TYPE="${PROJECT_TYPE:-typescript}"
+
+# =============================================================================
+# LOOP SETTINGS
+# =============================================================================
+
+MAX_CALLS_PER_HOUR=60
+CLAUDE_TIMEOUT_MINUTES=20
+CLAUDE_OUTPUT_FORMAT="json"
+
+# =============================================================================
+# TOOL PERMISSIONS
+# =============================================================================
+
+# Read/Write/Edit + safe git + pnpm + cdk + wrangler + terraform plan + vitest
+ALLOWED_TOOLS="Write,Read,Edit,Grep,Glob,Bash(git add *),Bash(git commit *),Bash(git diff *),Bash(git log *),Bash(git status),Bash(git status *),Bash(git push *),Bash(git pull *),Bash(git fetch *),Bash(git checkout *),Bash(git branch *),Bash(git stash *),Bash(git merge *),Bash(git tag *),Bash(pnpm *),Bash(npx *),Bash(cdk *),Bash(wrangler *),Bash(terraform plan *),Bash(terraform fmt *),Bash(terraform validate *),Bash(node *),Bash(vitest *),Bash(playwright *),Bash(docker compose up *),Bash(docker compose down *),Bash(docker compose logs *)"
+
+# =============================================================================
+# SESSION MANAGEMENT
+# =============================================================================
+
+SESSION_CONTINUITY=true
+SESSION_EXPIRY_HOURS=24
+
+# =============================================================================
+# TASK SOURCES
+# =============================================================================
+
+TASK_SOURCES="local"
+
+# =============================================================================
+# CIRCUIT BREAKER THRESHOLDS
+# =============================================================================
+
+CB_NO_PROGRESS_THRESHOLD=3
+CB_SAME_ERROR_THRESHOLD=5
+CB_OUTPUT_DECLINE_THRESHOLD=70
+CB_COOLDOWN_MINUTES=30
+CB_AUTO_RESET=false
+
+# =============================================================================
+# ADVANCED SETTINGS
+# =============================================================================
+
+CLAUDE_AUTO_UPDATE=true
+CLAUDE_MIN_VERSION="2.0.76"
+RALPH_VERBOSE=false

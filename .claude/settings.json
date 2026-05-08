@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=\"$(jq -r '.tool_input.command // empty')\" && case \"$cmd\" in *\"terraform destroy\"*|*\"terraform apply -destroy\"*) for env in production main master prod develop; do if echo \"$cmd\" | grep -E \"environment=$env\\\\b|TF_VAR_environment=$env\\\\b|/$env/\" >/dev/null; then echo '{\"decision\":\"block\",\"reason\":\"Refusing terraform destroy against protected env: '$env'. The skeleton mitigates this (pitfall #13) — destroy denylist is production|main|master|prod|develop. If you need to wipe a non-protected env, name it explicitly.\"}'; exit 0; fi; done ;; esac && case \"$cmd\" in *\"aws s3 rb\"*|*\"aws s3api delete-bucket\"*) if echo \"$cmd\" | grep -E \"frontend-production|terraform-state\" >/dev/null; then echo '{\"decision\":\"block\",\"reason\":\"Refusing to delete production frontend or terraform state bucket. These are singletons in aws-setup/.\"}'; exit 0; fi ;; esac && exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "path=\"$(jq -r '.tool_input.file_path // empty')\" && case \"$path\" in */aws-setup/*|*/.ralph/PROMPT.md|*/.ralph/specs/*|*/.ralphrc|*/scripts/derive-env-name.sh) echo '{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"Editing protected substrate file ('$path'). The skeleton or .ralph/ files are NOT meant to be modified casually. Proceed only if this iteration explicitly requires it.\"}'; exit 0 ;; esac; exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "path=\"$(jq -r '.tool_input.file_path // empty')\" && case \"$path\" in *.go) gofmt -w \"$path\" 2>/dev/null && echo '{\"systemMessage\":\"gofmt applied to '$path'\"}' ;; esac; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

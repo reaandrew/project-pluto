@@ -1,71 +1,61 @@
-# Project Instructions for Claude
+# Claude Code instructions — website-agency
+
+This is an AI-assisted outbound website-redesign pipeline. The implementation repo is **created from the GitHub template `reaandrew/cloud-skeleton`** and customized via `bin/init.sh`. This spec repo (`reaandrew/ai-website-agency`) is the canonical source for the spec; copy `.ralph/` and `CLAUDE.md` into the implementation repo on initialization.
+
+Architecture, data, events, prompts, UI, iteration plan, and quality rules live under `.ralph/specs/`. Claude-based agents/commands/hooks live under `.claude/`.
+
+## Read this first
+- `.ralph/specs/00-overview.md` — what we're building and the operating principles.
+- `.ralph/specs/01-architecture.md` — § "Starting point: cloud-skeleton template" + the stack table.
+- `.ralph/specs/04-feedback-loops.md` — the three feedback loops (lead criteria, design, email).
+- `.ralph/specs/09-iterations.md` — the 12-iteration plan, starting with iter 0 (skeleton bring-up).
+- `.ralph/specs/11-agents.md` — the Claude-based agents, slash commands, and hooks.
+
+Everything else (`02-data-model.md`, `03-events.md`, `05-capacity-and-cost.md`, `06-discovery-and-compliance.md`, `07-bedrock-prompts.md`, `08-admin-ui.md`, `10-quality-rules.md`, `stdlib/`) is referenced from those.
+
+## Claude-based machinery
+- `.claude/agents/` — four read-only review subagents (skeleton-pitfall, quality-rules, bedrock-prompt, cost-idempotency). Fired by the implementing-Claude before opening a PR.
+- `.claude/commands/` — slash commands: `/review-iteration`, `/seed-vertical`, `/cost-burn`, `/explain-pitfall`.
+- `.claude/settings.json` — hooks: destructive-AWS guard, substrate-edit warning, auto-`gofmt` on Go saves.
+- `.github/pull_request_template.md` — enforces the spec's discipline (iteration ID, agents fired, pitfalls touched, capacity/cost/idempotency confirmations, demo evidence).
+
+## When running under Ralph
+`.ralph/PROMPT.md` is the operating manual. `.ralph/fix_plan.md` is the build queue. Pick the topmost unchecked item. Before opening a PR, run `/review-iteration` to fire the relevant review agents.
+
+## When invoked directly (not in Ralph's loop)
+Treat `.ralph/fix_plan.md` as the priority list, but do not produce the `---RALPH_STATUS---` block. Use a normal short summary at the end of the response.
 
 ## AWS Authentication
 
-Always use `aws-vault` with profile `personal_iphone` for AWS commands.
+For one-time bootstrap and emergency manual operations, always use `aws-vault` with the project's profile (set by `bin/init.sh --aws-vault-profile`):
 
 ```bash
-aws-vault exec personal_iphone -- <command>
+aws-vault exec <profile> -- terraform apply
+aws-vault exec <profile> -- aws sts get-caller-identity
 ```
 
-Examples:
-- `aws-vault exec personal_iphone -- terraform apply`
-- `aws-vault exec personal_iphone -- aws s3 ls`
-- `aws-vault exec personal_iphone -- aws sts get-caller-identity`  → expects account `276447169330`
+In CI, AWS auth is via the OIDC role `github-actions-<project>` set up in `aws-setup/`.
 
-## Repo layout
+## Hard rules
+- Read `.ralph/specs/10-quality-rules.md` before producing any AI content. Non-negotiable: no fake testimonials, no fake awards, no claim-the-preview-is-published, no skipping `politeFetch` / `withCostCap` / idempotency, **no logging the passcode cleartext**.
+- Skeleton pitfall mitigations are non-negotiable. See the impl repo's `docs/ARCHITECTURE.md` § Pitfalls table.
+- Use **Go 1.24** for Lambdas (`provided.al2023`). Each service is `lambdas/<name>/` with `main.go` + a placeholder `bootstrap`.
+- Use **Terraform 1.9** in two stacks: `aws-setup/` for singletons (manual, `aws-vault`) and `terraform/` for per-env (CI). Cloudflare resources in `cloudflare/`.
+- Default Bedrock model is **Haiku 4.5**; only Sonnet 4.6 where `07-bedrock-prompts.md` calls for it.
+- Region: `eu-west-2`.
+- **Generated business previews** are hosted on Cloudflare R2 + a single Worker (with KV + Rate Limiting bindings) — passcode-gated. **Never** propose S3+CloudFront for these.
+- The **admin app** is hosted on the skeleton's CloudFront+S3 (NOT Cloudflare Pages).
+- The skeleton ships per-PR ephemeral envs. Use them for integration testing — do not run integration tests against a shared dev env.
 
-- `/aws-setup` — one-time bootstrap (zone, certs, CloudFronts, OIDC, IAM role). Applied manually with aws-vault. OWN tfstate at `aws-setup/terraform.tfstate` in `website-agency-terraform-state-276447169330`.
-- `/terraform` — per-env stack applied by CI. State key `terraform/website-agency/{env}/terraform.tfstate` per env.
-- `/lambdas` — Go Lambdas on `provided.al2023`. Shared code in `lambdas/pkg/`.
-- `/frontend` — React + Vite + TypeScript. `vite.config.ts` MUST keep `base: './'` for path-prefix preview to work.
-- `/scripts` — pipeline plumbing. `derive-env-name.sh` is the SINGLE source of truth for env-name derivation (sourced by every workflow step).
-- `/e2e-tests` — Playwright.
-- `/.github/workflows` — `deploy.yml` is the main pipeline.
+## Build / test / deploy
+See `.ralph/AGENT.md`.
 
-## Per-environment URL contract
+## Do not modify
+- `.ralph/` directory contents (PROMPT.md, fix_plan.md, AGENT.md, specs/).
+- `.claude/` agents, commands, hooks (the system prompts and hook scripts are load-bearing — extend, don't rewrite).
+- `.ralphrc`.
+- The skeleton's `aws-setup/` files except where iteration 0 explicitly extends them.
+- `scripts/derive-env-name.sh` — single source of truth for env-name derivation (skeleton pitfall #19).
+- `bin/init.sh` — delete it after first use; never reuse.
 
-| | Production (`main`) | Preview (`feat-x`) |
-|---|---|---|
-| Frontend | https://agency.andrewreaassociates.com | https://preview.agency.andrewreaassociates.com/feat-x/ |
-| BFF | https://bff.agency.andrewreaassociates.com | https://feat-x.bff.agency.andrewreaassociates.com |
-| API | https://api.agency.andrewreaassociates.com | https://api-feat-x.agency.andrewreaassociates.com |
-
-## Build commands
-
-```bash
-# Lambda (per Lambda dir)
-cd lambdas/api-hello
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bootstrap .
-
-# Frontend
-cd frontend && npm run build   # outputs to dist/
-
-# Terraform (validate only, no apply)
-cd aws-setup && terraform fmt -recursive -check && terraform validate
-cd terraform   && terraform fmt -recursive -check && terraform validate
-```
-
-## Things to never do
-
-- Never commit a real `bootstrap` binary — only the placeholder shell script that prints "placeholder".
-- Never use `terraform workspace` — environments are separated by tfstate `key`, not by workspace.
-- Never hardcode a domain literal anywhere except `var.base_domain`'s default. Everything else flows from `local.api_domain` / `local.bff_domain` / `local.frontend_url` derived in `terraform/shared-infrastructure-data.tf`.
-- Never use `overwrite=true` on `aws_ssm_parameter` for secrets. Use `lifecycle { ignore_changes = [value] }` and import.
-- Never put singleton resources (CloudFront, hosted zone, certs) in `terraform/`. They live in `aws-setup/`.
-- Never put `force_destroy = true` on the production frontend bucket.
-- Never run `terraform destroy` against `production`/`main`/`master`/`prod`/`develop`. The cleanup script and the cleanup workflow job both refuse those names.
-
-## Pitfalls already mitigated (do NOT relitigate)
-
-| Pitfall | Mitigation |
-|---|---|
-| S3 force_destroy blocked by missing IAM perms | `aws-setup/main.tf` `s3-access` policy grants `DeleteObjectVersion` etc.; `cleanup-environment.sh` empties versioned + multipart first |
-| Dummy bootstrap missing breaks `terraform plan` on fresh branch | Placeholder committed at `lambdas/api-hello/bootstrap`; CI re-creates dummies in provision-branch and cleanup jobs |
-| Lambda auto-creates no-retention log groups | `terraform/lambda-log-groups.tf` declares them with retention=30; Lambda has `depends_on=[<lg>]` |
-| IAM 10KB inline policy limit | Policies grouped by permission level (read/write), never per-table; ARN wildcards |
-| Stale tfstate after destroy | cleanup workflow `aws s3 rm s3://${TF_STATE_BUCKET}/terraform/website-agency/${ENVIRONMENT}/ --recursive` |
-| Cross-workflow env-name derivation drift | `scripts/derive-env-name.sh` sourced everywhere |
-| Per-branch CloudFront (15min provision + 15min destroy) | SHARED CloudFront for preview + BFF; only API GW custom domain is per-branch |
-
-See `docs/ARCHITECTURE.md` for the full pitfall→mitigation matrix.
+These keep Ralph's loop alive and the substrate stable. Edits to the *content* of `fix_plan.md` and `AGENT.md` are expected (mark items complete; add new commands); deletion or restructuring is not.
