@@ -44,8 +44,8 @@ env:
   TF_VERSION: '1.9.8'
   AWS_REGION: 'eu-west-2'
   AWS_ACCOUNT_ID: '276447169330'
-  TF_STATE_BUCKET: 'website-agency-terraform-state-276447169330'
-  PREVIEW_BUCKET: 'website-agency-frontend-preview-shared-276447169330'
+  TF_STATE_BUCKET: 'ai-website-agency-terraform-state-276447169330'
+  PREVIEW_BUCKET: 'ai-website-agency-frontend-preview-shared-276447169330'
 
 jobs:
   destroy:
@@ -80,7 +80,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-website-agency-destroy-${{ github.run_id }}
+          role-session-name: GitHubActions-ai-website-agency-destroy-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: hashicorp/setup-terraform@v3
@@ -105,7 +105,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="key=terraform/ai-website-agency/${ENVIRONMENT}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}"
 
       - name: Terraform destroy
@@ -114,7 +114,7 @@ jobs:
 
       - name: Remove orphan tfstate
         # Otherwise reusing the same branch name later picks up stale state.
-        run: aws s3 rm "s3://${TF_STATE_BUCKET}/terraform/website-agency/${ENVIRONMENT}/" --recursive
+        run: aws s3 rm "s3://${TF_STATE_BUCKET}/terraform/ai-website-agency/${ENVIRONMENT}/" --recursive
 
       - name: Clean preview frontend prefix
         run: aws s3 rm "s3://${PREVIEW_BUCKET}/${ENVIRONMENT}/" --recursive
@@ -125,7 +125,7 @@ jobs:
         with:
           header: deploy-status
           message: |
-            ### website-agency — environment torn down
+            ### ai-website-agency — environment torn down
 
             Preview environment `${{ env.ENVIRONMENT }}` destroyed:
             - Terraform resources: destroyed

@@ -6,7 +6,7 @@
                           User
               ┌─────────────┼─────────────┐
               ▼             ▼             ▼
-       website-agency.lev…   bff.website-agency.lev…  preview.website-agency.lev…/<env>/
+       ai-website-agency.lev…   bff.ai-website-agency.lev…  preview.ai-website-agency.lev…/<env>/
               │             │                       │
               ▼             ▼                       ▼
        ┌────────────┐ ┌──────────────┐    ┌────────────────────┐
@@ -20,7 +20,7 @@
        │ S3 prod-fe │ │   api-<env>) │              ▼
        └────────────┘ └──────┬───────┘    ┌────────────────────┐
                              │             │ S3 preview-shared │
-                  api[.|-<env>].website-agency…  │ /<env>/...        │
+                  api[.|-<env>].ai-website-agency…  │ /<env>/...        │
                              ▼             └────────────────────┘
                     ┌──────────────────┐
                     │ API Gateway v2   │   <── per-env custom domain
@@ -28,12 +28,12 @@
                     └────────┬─────────┘
                              ▼
                     ┌──────────────────┐
-                    │ Lambda           │   website-agency-api-hello[-<env>]
+                    │ Lambda           │   ai-website-agency-api-hello[-<env>]
                     │ (Go, prov.al2023)│   provided.al2023, bootstrap
                     └────────┬─────────┘
                              ▼
                     ┌──────────────────┐
-                    │ DynamoDB         │   website-agency-items[-<env>]
+                    │ DynamoDB         │   ai-website-agency-items[-<env>]
                     │ PAY_PER_REQUEST  │   PITR + del-prot prod-only
                     └──────────────────┘
 
@@ -43,11 +43,11 @@ Singletons (one copy in aws-setup/):
     us-east-1 for CloudFront; both also cover *.bff.agency.andrewreaassociates.com)
   - 3× CloudFront distributions (prod-fe, preview-fe, bff)
   - OIDC provider for GitHub Actions
-  - GitHub Actions IAM role github-actions-website-agency
-  - Lambda@Edge: website-agency-preview-router, website-agency-bff-origin-router
-  - CloudFront Function: website-agency-cookie-to-auth
+  - GitHub Actions IAM role github-actions-ai-website-agency
+  - Lambda@Edge: ai-website-agency-preview-router, ai-website-agency-bff-origin-router
+  - CloudFront Function: ai-website-agency-cookie-to-auth
   - WAF WebACL
-  - S3: website-agency-frontend-production, website-agency-frontend-preview-shared-<acct>
+  - S3: ai-website-agency-frontend-production, ai-website-agency-frontend-preview-shared-<acct>
 ```
 
 ## Pitfalls → mitigations
@@ -62,7 +62,7 @@ Singletons (one copy in aws-setup/):
 | 6 | IAM 10KB inline policy limit (smm 34d7d25) | `aws-setup/main.tf` splits GH-actions IAM into 12 `aws_iam_role_policy` resources, never one giant doc. `terraform/iam.tf` groups DynamoDB by permission level (read/write), not per-table; uses ARN wildcards. |
 | 7 | Hardcoded domains route prod traffic to prod from previews (tripwire e119c83, 0b817e2) | Every domain string flows from `var.base_domain` via `locals` in `shared-infrastructure-data.tf`. |
 | 8 | Long branch names break IAM/resource name limits | `env_sanitized = substr(..., 0, 31)`; Lambda@Edge router regex bounds `[a-z0-9-]{1,31}`; `derive-env-name.sh` `cut -c1-31`. |
-| 9 | Per-env state collisions (one tfstate file for all envs) | Backend block omits `key`; CI passes `-backend-config="key=terraform/website-agency/${env}/terraform.tfstate"` per apply. |
+| 9 | Per-env state collisions (one tfstate file for all envs) | Backend block omits `key`; CI passes `-backend-config="key=terraform/ai-website-agency/${env}/terraform.tfstate"` per apply. |
 | 10 | Per-env resources mixed into shared singletons in same stack (tripwire b431b45) | `aws-setup/` owns ALL singletons; `terraform/` consumes via `data.aws_ssm_parameter` only. |
 | 11 | Terraform replacement order errors (tripwire 1d3fc8e, b316db5) | `lifecycle.create_before_destroy = true` on both ACM certs. |
 | 12 | ACM validation race | `aws_acm_certificate_validation` blocks before SSM publishes the ARN; `terraform/` reads SSM, so cross-stack ordering is enforced. |

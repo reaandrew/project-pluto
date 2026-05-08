@@ -35,7 +35,7 @@ resource "aws_route53_record" "cert_validation_eu_west_2" {
     }
   }
 
-  zone_id         = aws_route53_zone.website-agency.zone_id
+  zone_id         = aws_route53_zone.ai-website-agency.zone_id
   name            = each.value.name
   type            = each.value.type
   records         = [each.value.record]
@@ -78,7 +78,7 @@ resource "aws_route53_record" "cert_validation_us_east_1" {
     }
   }
 
-  zone_id         = aws_route53_zone.website-agency.zone_id
+  zone_id         = aws_route53_zone.ai-website-agency.zone_id
   name            = each.value.name
   type            = each.value.type
   records         = [each.value.record]

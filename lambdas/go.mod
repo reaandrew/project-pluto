@@ -1,4 +1,4 @@
-module github.com/reaandrew/website-agency/lambdas
+module github.com/reaandrew/ai-website-agency/lambdas
 
 go 1.24.13
 

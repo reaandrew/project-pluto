@@ -25,8 +25,8 @@ fi
 
 case "${MODE}" in
   prod)
-    BUCKET=$(aws ssm get-parameter --name /website-agency/s3/production_bucket --query 'Parameter.Value' --output text)
-    DIST_ID=$(aws ssm get-parameter --name /website-agency/cf/production_distribution_id --query 'Parameter.Value' --output text)
+    BUCKET=$(aws ssm get-parameter --name /ai-website-agency/s3/production_bucket --query 'Parameter.Value' --output text)
+    DIST_ID=$(aws ssm get-parameter --name /ai-website-agency/cf/production_distribution_id --query 'Parameter.Value' --output text)
     S3_PREFIX="s3://${BUCKET}/"
     INVALIDATION_PATH="/*"
     BFF_URL="https://bff.${BASE_DOMAIN}"
@@ -38,8 +38,8 @@ case "${MODE}" in
       echo "::error::preview mode requires an env name (and not 'production')"
       exit 1
     fi
-    BUCKET=$(aws ssm get-parameter --name /website-agency/s3/preview_bucket --query 'Parameter.Value' --output text)
-    DIST_ID=$(aws ssm get-parameter --name /website-agency/cf/preview_distribution_id --query 'Parameter.Value' --output text)
+    BUCKET=$(aws ssm get-parameter --name /ai-website-agency/s3/preview_bucket --query 'Parameter.Value' --output text)
+    DIST_ID=$(aws ssm get-parameter --name /ai-website-agency/cf/preview_distribution_id --query 'Parameter.Value' --output text)
     S3_PREFIX="s3://${BUCKET}/${ENV_NAME}/"
     INVALIDATION_PATH="/${ENV_NAME}/*"
     BFF_URL="https://${ENV_NAME}.bff.${BASE_DOMAIN}"

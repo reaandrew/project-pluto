@@ -9,9 +9,9 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 
-	"github.com/reaandrew/website-agency/lambdas/pkg/config"
-	"github.com/reaandrew/website-agency/lambdas/pkg/httpresp"
-	applog "github.com/reaandrew/website-agency/lambdas/pkg/log"
+	"github.com/reaandrew/ai-website-agency/lambdas/pkg/config"
+	"github.com/reaandrew/ai-website-agency/lambdas/pkg/httpresp"
+	applog "github.com/reaandrew/ai-website-agency/lambdas/pkg/log"
 )
 
 type response struct {
@@ -31,7 +31,7 @@ func handle(ctx context.Context, _ events.APIGatewayV2HTTPRequest) (events.APIGa
 	logger.Info("health check", "env", cfg.Environment)
 
 	body, _ := json.Marshal(response{
-		Message:    "hello from website-agency",
+		Message:    "hello from ai-website-agency",
 		Env:        cfg.Environment,
 		Ts:         time.Now().Unix(),
 		ItemsTable: cfg.ItemsTable,

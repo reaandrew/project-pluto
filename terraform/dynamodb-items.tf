@@ -1,5 +1,5 @@
 resource "aws_dynamodb_table" "items" {
-  name         = "website-agency-items${local.env_suffix}"
+  name         = "ai-website-agency-items${local.env_suffix}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "pk"
   range_key    = "sk"

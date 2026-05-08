@@ -20,7 +20,7 @@ Click **"Use this template"** at the top of this repo on GitHub, give your new r
 git clone https://github.com/YOUR-ORG/YOUR-REPO.git
 cd YOUR-REPO
 
-# 3. Customise — replaces every "website-agency" / account / domain / org reference
+# 3. Customise — replaces every "ai-website-agency" / account / domain / org reference
 bin/init.sh \
   --project        myapp \
   --account-id     123456789012 \
@@ -42,9 +42,9 @@ git push -u origin main
 
 ### What `init.sh` does (verified end-to-end)
 
-- Replaces `website-agency` → your project, `276447169330` → your account, `agency.andrewreaassociates.com` → your domain, `reaandrew/website-agency` → your org/repo, `personal_iphone` → your aws-vault profile, and rewrites the Go module path.
+- Replaces `ai-website-agency` → your project, `276447169330` → your account, `agency.andrewreaassociates.com` → your domain, `reaandrew/ai-website-agency` → your org/repo, `personal_iphone` → your aws-vault profile, and rewrites the Go module path.
 - Substitutes across every `.tf`, `.go`, `.yml`, `.md`, `.ts`, `.tsx`, `.js`, `.json`, `.sh`, `go.mod`, `package.json`, `package-lock.json`, `.gitignore` file in the repo (excluding `.git`, `node_modules`, `.terraform`, `frontend/dist`, the placeholder bootstrap binary, and `bin/init.sh` itself).
-- Tested on a throwaway copy: 38/75 files substituted, **zero residual `website-agency` / `levantar` / `276447169330` references** left in any source file.
+- Tested on a throwaway copy: 38/75 files substituted, **zero residual `ai-website-agency` / `levantar` / `276447169330` references** left in any source file.
 - Re-initialises git history with a single `Initial commit from cloud-skeleton template` so each new project starts clean.
 - Validates inputs: 12-digit AWS account id, sane project regex (`^[a-z][a-z0-9-]{1,30}$`), all required flags present.
 - Prints the exact `gh repo create` + `gh secret set` + `aws-vault terraform apply` commands you should run next.
@@ -91,4 +91,4 @@ bin/init.sh   — template customiser; delete after running
 
 ## Provenance
 
-Hardened by repeated production use (this is bootstrap attempt #6 across the andrewreaassociates.com org). The reference implementation lives at `reaandrew/website-agency`.
+Hardened by repeated production use (this is bootstrap attempt #6 across the andrewreaassociates.com org). The reference implementation lives at `reaandrew/ai-website-agency`.

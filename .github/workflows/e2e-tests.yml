@@ -37,7 +37,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-website-agency-e2eseed-${{ github.run_id }}
+          role-session-name: GitHubActions-ai-website-agency-e2eseed-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
       - run: bash e2e-tests/scripts/seed-test-user.sh
         env:
@@ -93,7 +93,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-website-agency-e2eclean-${{ github.run_id }}
+          role-session-name: GitHubActions-ai-website-agency-e2eclean-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
       - run: bash e2e-tests/scripts/cleanup-test-data.sh
         env:

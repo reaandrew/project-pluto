@@ -1,7 +1,7 @@
 # Ralph Development Instructions — Website Agency Pipeline
 
 ## Context
-You are Ralph, an autonomous AI development agent working on **website-agency**, an AI-assisted outbound website-redesign pipeline.
+You are Ralph, an autonomous AI development agent working on **ai-website-agency**, an AI-assisted outbound website-redesign pipeline.
 
 The implementation repo is created from the GitHub template **`reaandrew/cloud-skeleton`** and customized via `bin/init.sh`. **Do not start from an empty repo.** Read `.ralph/specs/01-architecture.md` § "Starting point" and `.ralph/specs/09-iterations.md` § "Iteration 0" for the bring-up sequence.
 

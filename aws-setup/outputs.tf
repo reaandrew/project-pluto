@@ -4,12 +4,12 @@ output "github_actions_role_arn" {
 }
 
 output "route53_zone_id" {
-  value = aws_route53_zone.website-agency.zone_id
+  value = aws_route53_zone.ai-website-agency.zone_id
 }
 
 output "route53_nameservers" {
   description = "Nameservers for agency.andrewreaassociates.com. Add these as NS records in the parent andrewreaassociates.com zone."
-  value       = aws_route53_zone.website-agency.name_servers
+  value       = aws_route53_zone.ai-website-agency.name_servers
 }
 
 output "delegation_status" {
@@ -19,7 +19,7 @@ output "delegation_status" {
 
 output "nameservers" {
   description = "The four nameservers for the new zone — already added to the parent zone automatically."
-  value       = aws_route53_zone.website-agency.name_servers
+  value       = aws_route53_zone.ai-website-agency.name_servers
 }
 
 output "cert_arn_eu_west_2" {

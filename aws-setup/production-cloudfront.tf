@@ -1,12 +1,12 @@
-# Production frontend: agency.andrewreaassociates.com → S3 (website-agency-frontend-production) via OAC.
+# Production frontend: agency.andrewreaassociates.com → S3 (ai-website-agency-frontend-production) via OAC.
 # NOT force_destroy — manual gate; this is the only prod frontend artifact.
 
 resource "aws_s3_bucket" "frontend_production" {
-  bucket        = "website-agency-frontend-production-${var.aws_account_id}"
+  bucket        = "ai-website-agency-frontend-production-${var.aws_account_id}"
   force_destroy = false
 
   tags = {
-    Name      = "website-agency-frontend-production"
+    Name      = "ai-website-agency-frontend-production"
     Component = "frontend-prod"
   }
 }
@@ -38,8 +38,8 @@ resource "aws_s3_bucket_public_access_block" "frontend_production" {
 resource "aws_cloudfront_origin_access_control" "frontend_production" {
   provider = aws.us_east_1
 
-  name                              = "website-agency-frontend-production-oac"
-  description                       = "OAC for website-agency production frontend"
+  name                              = "ai-website-agency-frontend-production-oac"
+  description                       = "OAC for ai-website-agency production frontend"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -50,7 +50,7 @@ resource "aws_cloudfront_distribution" "frontend_production" {
 
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "website-agency production frontend (${var.base_domain})"
+  comment             = "ai-website-agency production frontend (${var.base_domain})"
   default_root_object = "index.html"
   aliases             = [var.base_domain]
   price_class         = "PriceClass_100"
@@ -112,7 +112,7 @@ resource "aws_cloudfront_distribution" "frontend_production" {
   }
 
   tags = {
-    Name      = "website-agency-frontend-production"
+    Name      = "ai-website-agency-frontend-production"
     Component = "frontend-prod"
   }
 }
@@ -141,7 +141,7 @@ resource "aws_s3_bucket_policy" "frontend_production_oac" {
 
 # Route53 A-alias for the apex.
 resource "aws_route53_record" "production_apex" {
-  zone_id = aws_route53_zone.website-agency.zone_id
+  zone_id = aws_route53_zone.ai-website-agency.zone_id
   name    = var.base_domain
   type    = "A"
   alias {

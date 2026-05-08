@@ -11,7 +11,7 @@
 // We MUST read x-original-host because by origin-request time CloudFront has already
 // overwritten the Host header with the (placeholder) origin domain.
 
-const HOST_PATTERN = /^([a-z0-9-]{1,31})\.bff\.website-agency\.levantar\.ai$/;
+const HOST_PATTERN = /^([a-z0-9-]{1,31})\.bff\.ai-website-agency\.levantar\.ai$/;
 
 exports.handler = async (event) => {
     const request = event.Records[0].cf.request;

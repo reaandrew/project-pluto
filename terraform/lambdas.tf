@@ -6,7 +6,7 @@ data "archive_file" "api_hello" {
 
 resource "aws_lambda_function" "api_hello" {
   filename         = data.archive_file.api_hello.output_path
-  function_name    = "website-agency-api-hello${local.env_suffix}"
+  function_name    = "ai-website-agency-api-hello${local.env_suffix}"
   role             = aws_iam_role.lambda_api.arn
   handler          = "bootstrap"
   source_code_hash = data.archive_file.api_hello.output_base64sha256

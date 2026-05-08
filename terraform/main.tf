@@ -11,8 +11,8 @@ terraform {
   # and .github/workflows/deploy.yml.
   #
   #   terraform init \
-  #     -backend-config="bucket=website-agency-terraform-state-276447169330" \
-  #     -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+  #     -backend-config="bucket=ai-website-agency-terraform-state-276447169330" \
+  #     -backend-config="key=terraform/ai-website-agency/${ENVIRONMENT}/terraform.tfstate" \
   #     -backend-config="region=eu-west-2"
   backend "s3" {
     use_lockfile = true
@@ -24,7 +24,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project     = "website-agency"
+      Project     = "ai-website-agency"
       Environment = var.environment
       ManagedBy   = "terraform"
       Stack       = "per-env"

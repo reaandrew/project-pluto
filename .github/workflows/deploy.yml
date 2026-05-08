@@ -27,9 +27,9 @@ env:
   GO_VERSION: '1.24.13'
   NODE_VERSION: '20'
   AWS_ACCOUNT_ID: '276447169330'
-  PROJECT: 'website-agency'
-  TF_STATE_BUCKET: 'website-agency-terraform-state-276447169330'
-  PREVIEW_BUCKET: 'website-agency-frontend-preview-shared-276447169330'
+  PROJECT: 'ai-website-agency'
+  TF_STATE_BUCKET: 'ai-website-agency-terraform-state-276447169330'
+  PREVIEW_BUCKET: 'ai-website-agency-frontend-preview-shared-276447169330'
   PROD_DOMAIN: 'agency.andrewreaassociates.com'
   PREVIEW_DOMAIN: 'preview.agency.andrewreaassociates.com'
 
@@ -71,7 +71,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-website-agency-provision-${{ github.run_id }}
+          role-session-name: GitHubActions-ai-website-agency-provision-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -81,7 +81,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="key=terraform/ai-website-agency/${ENVIRONMENT}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}"
       - name: Terraform plan (informational)
         working-directory: terraform
@@ -403,7 +403,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-website-agency-deploy-${{ github.run_id }}
+          role-session-name: GitHubActions-ai-website-agency-deploy-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: hashicorp/setup-terraform@v3
@@ -419,7 +419,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
-            -backend-config="key=terraform/website-agency/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="key=terraform/ai-website-agency/${ENVIRONMENT}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}"
 
       - name: Terraform validate
@@ -466,7 +466,7 @@ jobs:
         with:
           header: deploy-status
           message: |
-            ### website-agency deploy — `${{ env.ENVIRONMENT }}`
+            ### ai-website-agency deploy — `${{ env.ENVIRONMENT }}`
 
             | Stage | Status |
             |-------|--------|
@@ -512,7 +512,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          role-session-name: GitHubActions-website-agency-seed-${{ github.run_id }}
+          role-session-name: GitHubActions-ai-website-agency-seed-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
       - run: ./scripts/seed-environment-users.sh
         env:

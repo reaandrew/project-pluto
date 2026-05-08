@@ -5,10 +5,10 @@
 //
 // Traffic comes in as preview.agency.andrewreaassociates.com/<env>/<rest>.
 // We need to rewrite the origin S3 path so /<env>/<rest> is served from
-// s3://website-agency-frontend-preview-shared/<env>/<rest>.
+// s3://ai-website-agency-frontend-preview-shared/<env>/<rest>.
 // AND fall back to /<env>/index.html for client-side routing.
 
-const PREVIEW_BUCKET_HOST = 'website-agency-frontend-preview-shared-276447169330.s3.eu-west-2.amazonaws.com';
+const PREVIEW_BUCKET_HOST = 'ai-website-agency-frontend-preview-shared-276447169330.s3.eu-west-2.amazonaws.com';
 const ENV_PATTERN = /^\/([a-z0-9-]{1,31})(\/.*)?$/;
 
 exports.handler = async (event) => {

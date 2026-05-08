@@ -1,4 +1,4 @@
-// Package ddb provides DynamoDB helpers shared across website-agency Lambdas.
+// Package ddb provides DynamoDB helpers shared across ai-website-agency Lambdas.
 // Convention: every item has primary key (pk, sk) of type string. Use
 // PK("user", id) to build well-formed keys; this prevents stringly-typed bugs.
 package ddb

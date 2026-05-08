@@ -4,8 +4,8 @@
 # groups; never create per-table policy resources.
 
 resource "aws_iam_role" "lambda_api" {
-  name        = "website-agency-lambda-api${local.env_suffix}"
-  description = "Execution role for website-agency-api-* Lambdas (env: ${var.environment})"
+  name        = "ai-website-agency-lambda-api${local.env_suffix}"
+  description = "Execution role for ai-website-agency-api-* Lambdas (env: ${var.environment})"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -92,7 +92,7 @@ resource "aws_iam_role_policy" "ssm_read" {
         "ssm:GetParametersByPath",
       ]
       # Per-env namespace only.
-      Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/website-agency/${var.environment}/*"
+      Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/ai-website-agency/${var.environment}/*"
     }]
   })
 }

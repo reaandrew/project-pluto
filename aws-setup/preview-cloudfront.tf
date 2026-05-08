@@ -3,11 +3,11 @@
 # This means PR open/close never touches CloudFront — only S3 sync + Route53 stays unchanged.
 
 resource "aws_s3_bucket" "frontend_preview_shared" {
-  bucket        = "website-agency-frontend-preview-shared-${var.aws_account_id}"
+  bucket        = "ai-website-agency-frontend-preview-shared-${var.aws_account_id}"
   force_destroy = true # pitfall #1 — preview content is disposable
 
   tags = {
-    Name      = "website-agency-frontend-preview-shared"
+    Name      = "ai-website-agency-frontend-preview-shared"
     Component = "frontend-preview"
   }
 }
@@ -41,13 +41,13 @@ resource "aws_s3_bucket_public_access_block" "frontend_preview_shared" {
 resource "aws_cloudfront_origin_access_identity" "frontend_preview_shared" {
   provider = aws.us_east_1
 
-  comment = "OAI for website-agency preview-shared bucket"
+  comment = "OAI for ai-website-agency preview-shared bucket"
 }
 
 # IAM role for Lambda@Edge — must trust both lambda.amazonaws.com AND edgelambda.amazonaws.com.
 resource "aws_iam_role" "lambda_edge_execution" {
-  name        = "website-agency-lambda-edge-execution"
-  description = "Execution role for website-agency Lambda@Edge functions"
+  name        = "ai-website-agency-lambda-edge-execution"
+  description = "Execution role for ai-website-agency Lambda@Edge functions"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -61,7 +61,7 @@ resource "aws_iam_role" "lambda_edge_execution" {
   })
 
   tags = {
-    Name = "website-agency-lambda-edge-execution"
+    Name = "ai-website-agency-lambda-edge-execution"
   }
 }
 
@@ -73,17 +73,17 @@ resource "aws_iam_role_policy_attachment" "lambda_edge_basic" {
 # Lambda@Edge for preview path-prefix routing.
 data "archive_file" "preview_router" {
   type        = "zip"
-  source_file = "${path.module}/lambda-edge/website-agency-preview-router.js"
-  output_path = "${path.module}/.terraform/website-agency-preview-router.zip"
+  source_file = "${path.module}/lambda-edge/ai-website-agency-preview-router.js"
+  output_path = "${path.module}/.terraform/ai-website-agency-preview-router.zip"
 }
 
 resource "aws_lambda_function" "preview_router" {
   provider = aws.us_east_1
 
   filename         = data.archive_file.preview_router.output_path
-  function_name    = "website-agency-preview-router"
+  function_name    = "ai-website-agency-preview-router"
   role             = aws_iam_role.lambda_edge_execution.arn
-  handler          = "website-agency-preview-router.handler"
+  handler          = "ai-website-agency-preview-router.handler"
   source_code_hash = data.archive_file.preview_router.output_base64sha256
   runtime          = "nodejs20.x"
   timeout          = 5
@@ -91,7 +91,7 @@ resource "aws_lambda_function" "preview_router" {
   publish          = true # required for Lambda@Edge
 
   tags = {
-    Name = "website-agency-preview-router"
+    Name = "ai-website-agency-preview-router"
   }
 }
 
@@ -100,7 +100,7 @@ resource "aws_cloudfront_distribution" "frontend_preview" {
 
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "website-agency preview frontend (preview.${var.base_domain})"
+  comment             = "ai-website-agency preview frontend (preview.${var.base_domain})"
   default_root_object = "index.html"
   aliases             = ["preview.${var.base_domain}"]
   price_class         = "PriceClass_100"
@@ -144,7 +144,7 @@ resource "aws_cloudfront_distribution" "frontend_preview" {
   }
 
   tags = {
-    Name      = "website-agency-frontend-preview"
+    Name      = "ai-website-agency-frontend-preview"
     Component = "frontend-preview"
   }
 }
@@ -166,7 +166,7 @@ resource "aws_s3_bucket_policy" "frontend_preview_oai" {
 }
 
 resource "aws_route53_record" "preview" {
-  zone_id = aws_route53_zone.website-agency.zone_id
+  zone_id = aws_route53_zone.ai-website-agency.zone_id
   name    = "preview.${var.base_domain}"
   type    = "A"
   alias {

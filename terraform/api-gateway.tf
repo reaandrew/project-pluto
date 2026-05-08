@@ -1,7 +1,7 @@
 resource "aws_apigatewayv2_api" "main" {
-  name          = "website-agency-api${local.env_suffix}"
+  name          = "ai-website-agency-api${local.env_suffix}"
   protocol_type = "HTTP"
-  description   = "website-agency API (env: ${var.environment})"
+  description   = "ai-website-agency API (env: ${var.environment})"
 
   cors_configuration {
     allow_origins = local.is_production ? [

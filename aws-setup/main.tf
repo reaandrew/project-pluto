@@ -9,7 +9,7 @@ terraform {
   # Bucket name is hardcoded because backend blocks don't allow variables.
   # State bucket is created out-of-band — see docs/BOOTSTRAP.md step 1.
   backend "s3" {
-    bucket       = "website-agency-terraform-state-276447169330"
+    bucket       = "ai-website-agency-terraform-state-276447169330"
     key          = "aws-setup/terraform.tfstate"
     region       = "eu-west-2"
     use_lockfile = true
@@ -21,7 +21,7 @@ provider "aws" {
   region = var.aws_region
   default_tags {
     tags = {
-      Project   = "website-agency"
+      Project   = "ai-website-agency"
       ManagedBy = "terraform"
       Stack     = "aws-setup"
     }
@@ -34,7 +34,7 @@ provider "aws" {
   region = "us-east-1"
   default_tags {
     tags = {
-      Project   = "website-agency"
+      Project   = "ai-website-agency"
       ManagedBy = "terraform"
       Stack     = "aws-setup"
     }
@@ -73,7 +73,7 @@ variable "github_org" {
 
 variable "github_repo" {
   type        = string
-  default     = "website-agency"
+  default     = "ai-website-agency"
   description = "GitHub repo name — constrains the OIDC trust policy to repo:<org>/<repo>:*"
 }
 
@@ -91,11 +91,11 @@ data "aws_iam_openid_connect_provider" "github" {
 # ---------------------------------------------------------------------------
 # GitHub Actions IAM role
 # ---------------------------------------------------------------------------
-# Trust policy is constrained to repo:reaandrew/website-agency:* — never broader.
+# Trust policy is constrained to repo:reaandrew/ai-website-agency:* — never broader.
 # This excludes pushes to forks (which would otherwise inherit the role).
 
 resource "aws_iam_role" "github_actions" {
-  name                 = "github-actions-website-agency"
+  name                 = "github-actions-ai-website-agency"
   description          = "Assumed by GitHub Actions in ${var.github_org}/${var.github_repo} via OIDC"
   max_session_duration = 3600
 
@@ -119,7 +119,7 @@ resource "aws_iam_role" "github_actions" {
   })
 
   tags = {
-    Name = "github-actions-website-agency"
+    Name = "github-actions-ai-website-agency"
   }
 }
 
@@ -150,15 +150,15 @@ resource "aws_iam_role_policy" "s3_access" {
           "s3:ListBucketVersions",
         ]
         Resource = [
-          "arn:aws:s3:::website-agency-terraform-state-${var.aws_account_id}",
-          "arn:aws:s3:::website-agency-terraform-state-${var.aws_account_id}/*",
+          "arn:aws:s3:::ai-website-agency-terraform-state-${var.aws_account_id}",
+          "arn:aws:s3:::ai-website-agency-terraform-state-${var.aws_account_id}/*",
         ]
       },
       {
         Sid      = "PerEnvBuckets"
         Effect   = "Allow"
-        Action   = "s3:*" # Full CRUD on website-agency-* buckets — too many granular IAM action names to enumerate
-        Resource = ["arn:aws:s3:::website-agency-*", "arn:aws:s3:::website-agency-*/*"]
+        Action   = "s3:*" # Full CRUD on ai-website-agency-* buckets — too many granular IAM action names to enumerate
+        Resource = ["arn:aws:s3:::ai-website-agency-*", "arn:aws:s3:::ai-website-agency-*/*"]
       },
     ]
   })
@@ -216,7 +216,7 @@ resource "aws_iam_role_policy" "frontend_deploy" {
   })
 }
 
-# 4. Lambda CRUD scoped to website-agency-* function names.
+# 4. Lambda CRUD scoped to ai-website-agency-* function names.
 resource "aws_iam_role_policy" "lambda_deploy" {
   name = "lambda-deploy"
   role = aws_iam_role.github_actions.id
@@ -245,12 +245,12 @@ resource "aws_iam_role_policy" "lambda_deploy" {
           "lambda:DeleteFunctionConcurrency",
           "lambda:PublishVersion",
         ]
-        Resource = "arn:aws:lambda:*:${var.aws_account_id}:function:website-agency-*"
+        Resource = "arn:aws:lambda:*:${var.aws_account_id}:function:ai-website-agency-*"
       },
       {
         Effect   = "Allow"
         Action   = "iam:PassRole"
-        Resource = "arn:aws:iam::${var.aws_account_id}:role/website-agency-*"
+        Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
         Condition = {
           StringEquals = {
             "iam:PassedToService" = "lambda.amazonaws.com"
@@ -321,7 +321,7 @@ resource "aws_iam_role_policy" "cloudwatch_logs" {
   })
 }
 
-# 7. DynamoDB — website-agency-* tables only.
+# 7. DynamoDB — ai-website-agency-* tables only.
 resource "aws_iam_role_policy" "dynamodb" {
   name = "dynamodb"
   role = aws_iam_role.github_actions.id
@@ -344,14 +344,14 @@ resource "aws_iam_role_policy" "dynamodb" {
         "dynamodb:ListTables",
       ]
       Resource = [
-        "arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/website-agency-*",
-        "arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/website-agency-*/index/*",
+        "arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/ai-website-agency-*",
+        "arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/ai-website-agency-*/index/*",
       ]
     }]
   })
 }
 
-# 8. IAM — website-agency-* roles only.
+# 8. IAM — ai-website-agency-* roles only.
 resource "aws_iam_role_policy" "iam_roles" {
   name = "iam-roles"
   role = aws_iam_role.github_actions.id
@@ -377,13 +377,13 @@ resource "aws_iam_role_policy" "iam_roles" {
           "iam:UntagRole",
           "iam:ListRoleTags",
         ]
-        Resource = "arn:aws:iam::${var.aws_account_id}:role/website-agency-*"
+        Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
       },
     ]
   })
 }
 
-# 9. SSM — read all under /website-agency/*, write only outside the cert/cf paths
+# 9. SSM — read all under /ai-website-agency/*, write only outside the cert/cf paths
 #    (those are owned by aws-setup/, never touched by terraform/).
 resource "aws_iam_role_policy" "ssm_access" {
   name = "ssm-access"
@@ -400,7 +400,7 @@ resource "aws_iam_role_policy" "ssm_access" {
           "ssm:GetParametersByPath",
           "ssm:ListTagsForResource",
         ]
-        Resource = "arn:aws:ssm:*:${var.aws_account_id}:parameter/website-agency/*"
+        Resource = "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*"
       },
       {
         # ssm:DescribeParameters is account-scoped — can't be narrowed to a path.
@@ -422,8 +422,8 @@ resource "aws_iam_role_policy" "ssm_access" {
         ]
         # CI manages app secrets per env; aws-setup owns the cert/cf/route53/s3 paths.
         Resource = [
-          "arn:aws:ssm:*:${var.aws_account_id}:parameter/website-agency/*/app/*",
-          "arn:aws:ssm:*:${var.aws_account_id}:parameter/website-agency/*/secret/*",
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/app/*",
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/secret/*",
         ]
       },
     ]
@@ -444,7 +444,7 @@ resource "aws_iam_role_policy" "wafv2" {
   })
 }
 
-# 11. SQS (placeholder — narrow to website-agency-* if/when queues are added).
+# 11. SQS (placeholder — narrow to ai-website-agency-* if/when queues are added).
 resource "aws_iam_role_policy" "sqs" {
   name = "sqs"
   role = aws_iam_role.github_actions.id
@@ -453,7 +453,7 @@ resource "aws_iam_role_policy" "sqs" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["sqs:*"]
-      Resource = "arn:aws:sqs:*:${var.aws_account_id}:website-agency-*"
+      Resource = "arn:aws:sqs:*:${var.aws_account_id}:ai-website-agency-*"
     }]
   })
 }
@@ -467,7 +467,7 @@ resource "aws_iam_role_policy" "sns" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["sns:*"]
-      Resource = "arn:aws:sns:*:${var.aws_account_id}:website-agency-*"
+      Resource = "arn:aws:sns:*:${var.aws_account_id}:ai-website-agency-*"
     }]
   })
 }

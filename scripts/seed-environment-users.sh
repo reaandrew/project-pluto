@@ -4,14 +4,14 @@
 #
 # Future shape:
 #   - bcrypt-hash $E2E_TEST_PASS
-#   - aws dynamodb put-item into website-agency-users-${ENVIRONMENT}
+#   - aws dynamodb put-item into ai-website-agency-users-${ENVIRONMENT}
 #   - mark user verified, set tier=free
 
 set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:?ENVIRONMENT must be set}"
-TABLE="website-agency-users-${ENVIRONMENT}"
-[[ "${ENVIRONMENT}" == "production" ]] && TABLE="website-agency-users"
+TABLE="ai-website-agency-users-${ENVIRONMENT}"
+[[ "${ENVIRONMENT}" == "production" ]] && TABLE="ai-website-agency-users"
 
 echo "==> seed-environment-users.sh placeholder"
 echo "    env:  ${ENVIRONMENT}"

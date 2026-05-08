@@ -21,9 +21,9 @@ esac
 
 echo "==> Cleaning up environment: ${ENVIRONMENT}"
 
-# Anchored regex so we don't match `website-agency-something-else` accidentally
+# Anchored regex so we don't match `ai-website-agency-something-else` accidentally
 # (smm pattern was loose — see pitfall #13).
-PATTERN="^website-agency-.*-${ENVIRONMENT}-[0-9]{12}$|^website-agency-.*-${ENVIRONMENT}$"
+PATTERN="^ai-website-agency-.*-${ENVIRONMENT}-[0-9]{12}$|^ai-website-agency-.*-${ENVIRONMENT}$"
 
 BUCKETS=$(aws s3api list-buckets --query 'Buckets[].Name' --output text | tr '\t' '\n' | grep -E "${PATTERN}" || true)
 

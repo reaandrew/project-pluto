@@ -4,11 +4,11 @@
 # objects + multipart uploads first.
 
 resource "aws_s3_bucket" "uploads" {
-  bucket        = "website-agency-uploads${local.env_suffix}-${data.aws_caller_identity.current.account_id}"
+  bucket        = "ai-website-agency-uploads${local.env_suffix}-${data.aws_caller_identity.current.account_id}"
   force_destroy = !local.is_production
 
   tags = merge(local.common_tags, {
-    Name      = "website-agency-uploads${local.env_suffix}"
+    Name      = "ai-website-agency-uploads${local.env_suffix}"
     Component = "uploads"
   })
 }

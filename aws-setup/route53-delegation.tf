@@ -17,5 +17,5 @@ resource "aws_route53_record" "delegation" {
   name    = var.base_domain
   type    = "NS"
   ttl     = 300
-  records = aws_route53_zone.website-agency.name_servers
+  records = aws_route53_zone.ai-website-agency.name_servers
 }

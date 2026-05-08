@@ -10,8 +10,8 @@ Marking convention: `[ ]` not done, `[~]` in progress, `[x]` done.
 
 ## High Priority — Iteration 0.A: Bring up cloud-skeleton
 
-- [x] **0.A.1** Create implementation repo from template `reaandrew/cloud-skeleton`. Clone locally. *(done 2026-05-08: `reaandrew/website-agency`, cloned to `/home/parallels/Development/website-agency`.)*
-- [x] **0.A.2** Run `bin/init.sh --dry-run` to preview, then run for real with the project flags. Commit. Delete `bin/init.sh`. *(done 2026-05-08: `--project website-agency --account-id 276447169330 --base-domain agency.andrewreaassociates.com --parent-domain andrewreaassociates.com --github-org reaandrew --github-repo website-agency --aws-vault-profile personal_iphone`. Renamed `lambda-edge/finance-*.js` and `cloudfront-functions/finance-cookie-to-auth.js` since `init.sh` substitutes contents but not filenames. `bin/init.sh` deleted.)*
+- [x] **0.A.1** Create implementation repo from template `reaandrew/cloud-skeleton`. Clone locally. *(done 2026-05-08: `reaandrew/ai-website-agency`, cloned to `/home/parallels/Development/ai-website-agency`.)*
+- [x] **0.A.2** Run `bin/init.sh --dry-run` to preview, then run for real with the project flags. Commit. Delete `bin/init.sh`. *(done 2026-05-08: `--project ai-website-agency --account-id 276447169330 --base-domain agency.andrewreaassociates.com --parent-domain andrewreaassociates.com --github-org reaandrew --github-repo ai-website-agency --aws-vault-profile personal_iphone`. Renamed `lambda-edge/finance-*.js` and `cloudfront-functions/finance-cookie-to-auth.js` since `init.sh` substitutes contents but not filenames. `bin/init.sh` deleted.)*
 - [x] **0.A.3** Copy `.ralph/`, `.claude/`, `.github/pull_request_template.md`, and `CLAUDE.md` from the spec repo into the implementation repo. Commit. *(done 2026-05-08.)*
 
 > **RALPH: STOP HERE.** Items 0.A.4–0.A.6 are a one-time human ceremony — they require iPhone-MFA-gated `aws-vault exec` and editing NS records on the parent zone. Do **not** attempt `aws-vault`, `terraform apply`, or DNS edits autonomously. When you reach this point in the plan, emit `STATUS: BLOCKED` with `RECOMMENDATION` pointing the operator at `docs/BOOTSTRAP.md` and stop the loop. After the operator completes 0.A.4–0.A.6 and ticks the boxes, you'll resume cleanly at 0.A.7.
@@ -167,7 +167,7 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 
 ## Completed
 - [x] Specifications written (`.ralph/specs/`)
-- [x] Repo `reaandrew/ai-website-agency` (spec) created and pushed
+- [x] Repo `reaandrew/ai-ai-website-agency` (spec) created and pushed
 - [x] Repo `reaandrew/cloud-skeleton` made a GitHub template
 
 ## Notes

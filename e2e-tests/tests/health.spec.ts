@@ -11,7 +11,7 @@ test.describe('health', () => {
     const res = await ctx.get(`${API_URL}/health`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.message).toBe('hello from website-agency');
+    expect(body.message).toBe('hello from ai-website-agency');
     if (ENVIRONMENT !== 'unknown') {
       expect(body.env).toBe(ENVIRONMENT);
     }
@@ -23,7 +23,7 @@ test.describe('health', () => {
     const res = await ctx.get(`${BFF_URL}/health`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.message).toBe('hello from website-agency');
+    expect(body.message).toBe('hello from ai-website-agency');
     if (ENVIRONMENT !== 'unknown') {
       expect(body.env).toBe(ENVIRONMENT);
     }
@@ -31,7 +31,7 @@ test.describe('health', () => {
 
   test('frontend loads and shows env badge', async ({ page }) => {
     await page.goto(BASE_URL);
-    await expect(page.locator('h1')).toHaveText('website-agency');
+    await expect(page.locator('h1')).toHaveText('ai-website-agency');
     if (ENVIRONMENT !== 'unknown') {
       await expect(page.locator('code').first()).toHaveText(ENVIRONMENT);
     }

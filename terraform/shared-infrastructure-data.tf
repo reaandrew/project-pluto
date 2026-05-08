@@ -8,27 +8,27 @@ data "aws_route53_zone" "main" {
 }
 
 data "aws_ssm_parameter" "cert_eu_west_2" {
-  name = "/website-agency/cert/wildcard_arn_eu_west_2"
+  name = "/ai-website-agency/cert/wildcard_arn_eu_west_2"
 }
 
 data "aws_ssm_parameter" "production_cf_id" {
   count = local.is_production ? 1 : 0
-  name  = "/website-agency/cf/production_distribution_id"
+  name  = "/ai-website-agency/cf/production_distribution_id"
 }
 
 data "aws_ssm_parameter" "preview_cf_id" {
   count = local.is_production ? 0 : 1
-  name  = "/website-agency/cf/preview_distribution_id"
+  name  = "/ai-website-agency/cf/preview_distribution_id"
 }
 
 data "aws_ssm_parameter" "production_bucket" {
   count = local.is_production ? 1 : 0
-  name  = "/website-agency/s3/production_bucket"
+  name  = "/ai-website-agency/s3/production_bucket"
 }
 
 data "aws_ssm_parameter" "preview_bucket" {
   count = local.is_production ? 0 : 1
-  name  = "/website-agency/s3/preview_bucket"
+  name  = "/ai-website-agency/s3/preview_bucket"
 }
 
 locals {

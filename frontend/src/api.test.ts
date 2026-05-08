@@ -17,7 +17,7 @@ describe('api', () => {
       message: 'hi',
       env: 'unit-test',
       ts: 1,
-      items_table: 'website-agency-items-unit-test',
+      items_table: 'ai-website-agency-items-unit-test',
     };
     vi.stubGlobal(
       'fetch',

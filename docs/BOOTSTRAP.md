@@ -1,6 +1,6 @@
 # Bootstrap Runbook
 
-One-time procedure to bring up the website-agency project. Do this once per AWS account.
+One-time procedure to bring up the ai-website-agency project. Do this once per AWS account.
 
 ## Pre-flight
 
@@ -19,21 +19,21 @@ Terraform can't bootstrap its own backend, so the bucket exists before any `terr
 
 ```bash
 aws-vault exec personal_iphone -- aws s3api create-bucket \
-  --bucket website-agency-terraform-state-276447169330 \
+  --bucket ai-website-agency-terraform-state-276447169330 \
   --region eu-west-2 \
   --create-bucket-configuration LocationConstraint=eu-west-2
 
 aws-vault exec personal_iphone -- aws s3api put-bucket-versioning \
-  --bucket website-agency-terraform-state-276447169330 \
+  --bucket ai-website-agency-terraform-state-276447169330 \
   --versioning-configuration Status=Enabled
 
 aws-vault exec personal_iphone -- aws s3api put-bucket-encryption \
-  --bucket website-agency-terraform-state-276447169330 \
+  --bucket ai-website-agency-terraform-state-276447169330 \
   --server-side-encryption-configuration \
     '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 
 aws-vault exec personal_iphone -- aws s3api put-public-access-block \
-  --bucket website-agency-terraform-state-276447169330 \
+  --bucket ai-website-agency-terraform-state-276447169330 \
   --public-access-block-configuration \
     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
@@ -61,9 +61,9 @@ Output looks like:
 ```
 ===================================================================
 ACTION REQUIRED: Add the following NS records to the parent zone
-andrewreaassociates.com for the subdomain website-agency:
+andrewreaassociates.com for the subdomain ai-website-agency:
 
-  Name:   website-agency
+  Name:   ai-website-agency
   Type:   NS
   TTL:    300
   Values:
@@ -80,7 +80,7 @@ In whichever AWS account / DNS provider hosts `andrewreaassociates.com`:
 
 | Field | Value |
 |---|---|
-| Name | `website-agency` (becomes `agency.andrewreaassociates.com`) |
+| Name | `ai-website-agency` (becomes `agency.andrewreaassociates.com`) |
 | Type | `NS` |
 | TTL | 300 |
 | Values | the four nameservers from Step 3 |
@@ -106,22 +106,22 @@ This time `aws_acm_certificate_validation` can resolve the validation CNAMEs and
 ## Step 7 — Verify SSM contract
 
 ```bash
-aws-vault exec personal_iphone -- aws ssm get-parameters-by-path --path /website-agency --recursive --query "Parameters[].Name"
+aws-vault exec personal_iphone -- aws ssm get-parameters-by-path --path /ai-website-agency --recursive --query "Parameters[].Name"
 ```
 
 Expected entries:
 
 ```
-/website-agency/cert/wildcard_arn_eu_west_2
-/website-agency/cert/wildcard_arn_us_east_1
-/website-agency/cf/bff_preview_distribution_id
-/website-agency/cf/bff_production_distribution_id
-/website-agency/cf/preview_distribution_id
-/website-agency/cf/production_distribution_id
-/website-agency/route53/zone_id
-/website-agency/route53/zone_name
-/website-agency/s3/preview_bucket
-/website-agency/s3/production_bucket
+/ai-website-agency/cert/wildcard_arn_eu_west_2
+/ai-website-agency/cert/wildcard_arn_us_east_1
+/ai-website-agency/cf/bff_preview_distribution_id
+/ai-website-agency/cf/bff_production_distribution_id
+/ai-website-agency/cf/preview_distribution_id
+/ai-website-agency/cf/production_distribution_id
+/ai-website-agency/route53/zone_id
+/ai-website-agency/route53/zone_name
+/ai-website-agency/s3/preview_bucket
+/ai-website-agency/s3/production_bucket
 ```
 
 ## Step 8 — Hand off to CI
@@ -185,8 +185,8 @@ aws-vault exec personal_iphone -- aws lambda list-functions \
   --query "Functions[?contains(FunctionName,'feat-skeleton-test')]"
 aws-vault exec personal_iphone -- aws dynamodb list-tables \
   --query "TableNames[?contains(@,'feat-skeleton-test')]"
-aws-vault exec personal_iphone -- aws s3 ls "s3://website-agency-terraform-state-276447169330/terraform/website-agency/feat-skeleton-test/"
-aws-vault exec personal_iphone -- aws s3 ls "s3://website-agency-frontend-preview-shared-276447169330/feat-skeleton-test/"
+aws-vault exec personal_iphone -- aws s3 ls "s3://ai-website-agency-terraform-state-276447169330/terraform/ai-website-agency/feat-skeleton-test/"
+aws-vault exec personal_iphone -- aws s3 ls "s3://ai-website-agency-frontend-preview-shared-276447169330/feat-skeleton-test/"
 ```
 
 All five must be empty. If any leaks, see `scripts/cleanup-stale-envs.sh` (placeholder for ops use).

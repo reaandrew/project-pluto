@@ -7,8 +7,8 @@
 resource "aws_cloudfront_response_headers_policy" "security_headers" {
   provider = aws.us_east_1
 
-  name    = "website-agency-security-headers"
-  comment = "HSTS + standard security headers for website-agency"
+  name    = "ai-website-agency-security-headers"
+  comment = "HSTS + standard security headers for ai-website-agency"
 
   security_headers_config {
     strict_transport_security {
@@ -39,7 +39,7 @@ resource "aws_cloudfront_response_headers_policy" "security_headers" {
 resource "aws_cloudfront_response_headers_policy" "cors_passthrough" {
   provider = aws.us_east_1
 
-  name    = "website-agency-cors-passthrough"
+  name    = "ai-website-agency-cors-passthrough"
   comment = "CORS for BFF — credentialed requests from production + preview frontend"
 
   cors_config {

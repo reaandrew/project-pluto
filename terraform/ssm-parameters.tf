@@ -6,7 +6,7 @@
 # for when they appear.
 
 resource "aws_ssm_parameter" "example_app_secret" {
-  name        = "/website-agency/${var.environment}/secret/example_app_secret"
+  name        = "/ai-website-agency/${var.environment}/secret/example_app_secret"
   type        = "SecureString"
   value       = "PLACEHOLDER_SET_OUT_OF_BAND"
   description = "Example secret. Set the real value via `aws ssm put-parameter --overwrite`; Terraform will not touch it again."

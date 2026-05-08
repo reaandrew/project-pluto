@@ -4,13 +4,13 @@
 # the Lambda function, and add `depends_on` to the Lambda.
 
 resource "aws_cloudwatch_log_group" "api_hello" {
-  name              = "/aws/lambda/website-agency-api-hello${local.env_suffix}"
+  name              = "/aws/lambda/ai-website-agency-api-hello${local.env_suffix}"
   retention_in_days = 30
   tags              = local.common_tags
 }
 
 resource "aws_cloudwatch_log_group" "api_gateway" {
-  name              = "/aws/apigateway/website-agency${local.env_suffix}"
+  name              = "/aws/apigateway/ai-website-agency${local.env_suffix}"
   retention_in_days = 30
   tags              = local.common_tags
 }

@@ -10,7 +10,7 @@ import (
 
 func TestHandleHealth(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "unit-test")
-	t.Setenv("ITEMS_TABLE", "website-agency-items-unit-test")
+	t.Setenv("ITEMS_TABLE", "ai-website-agency-items-unit-test")
 
 	resp, err := handle(context.Background(), events.APIGatewayV2HTTPRequest{})
 	if err != nil {
@@ -30,10 +30,10 @@ func TestHandleHealth(t *testing.T) {
 	if body.Env != "unit-test" {
 		t.Errorf("expected env=unit-test, got %q", body.Env)
 	}
-	if body.Message != "hello from website-agency" {
+	if body.Message != "hello from ai-website-agency" {
 		t.Errorf("expected greeting, got %q", body.Message)
 	}
-	if body.ItemsTable != "website-agency-items-unit-test" {
+	if body.ItemsTable != "ai-website-agency-items-unit-test" {
 		t.Errorf("expected ItemsTable to come from env, got %q", body.ItemsTable)
 	}
 	if body.Ts == 0 {

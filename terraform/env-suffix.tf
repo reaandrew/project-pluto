@@ -9,7 +9,7 @@ locals {
   is_production = var.environment == "production"
 
   common_tags = {
-    Project     = "website-agency"
+    Project     = "ai-website-agency"
     Environment = var.environment
     ManagedBy   = "terraform"
   }

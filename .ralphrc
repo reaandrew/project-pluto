@@ -1,11 +1,11 @@
-# .ralphrc - Ralph project configuration for website-agency
+# .ralphrc - Ralph project configuration for ai-website-agency
 # Documentation: https://github.com/frankbria/ralph-claude-code
 
 # =============================================================================
 # PROJECT IDENTIFICATION
 # =============================================================================
 
-PROJECT_NAME="${PROJECT_NAME:-website-agency}"
+PROJECT_NAME="${PROJECT_NAME:-ai-website-agency}"
 PROJECT_TYPE="${PROJECT_TYPE:-typescript}"
 
 # =============================================================================

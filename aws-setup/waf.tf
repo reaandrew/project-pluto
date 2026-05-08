@@ -4,8 +4,8 @@
 resource "aws_wafv2_web_acl" "cloudfront" {
   provider = aws.us_east_1
 
-  name        = "website-agency-cloudfront"
-  description = "WAF for website-agency CloudFront distributions"
+  name        = "ai-website-agency-cloudfront"
+  description = "WAF for ai-website-agency CloudFront distributions"
   scope       = "CLOUDFRONT"
 
   default_action {
@@ -39,7 +39,7 @@ resource "aws_wafv2_web_acl" "cloudfront" {
     }
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "website-agency-CommonRuleSet"
+      metric_name                = "ai-website-agency-CommonRuleSet"
       sampled_requests_enabled   = true
     }
   }
@@ -59,7 +59,7 @@ resource "aws_wafv2_web_acl" "cloudfront" {
     }
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "website-agency-KnownBadInputs"
+      metric_name                = "ai-website-agency-KnownBadInputs"
       sampled_requests_enabled   = true
     }
   }
@@ -79,7 +79,7 @@ resource "aws_wafv2_web_acl" "cloudfront" {
     }
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "website-agency-IpReputation"
+      metric_name                = "ai-website-agency-IpReputation"
       sampled_requests_enabled   = true
     }
   }
@@ -99,18 +99,18 @@ resource "aws_wafv2_web_acl" "cloudfront" {
     }
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                = "website-agency-RateLimitPerIP"
+      metric_name                = "ai-website-agency-RateLimitPerIP"
       sampled_requests_enabled   = true
     }
   }
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "website-agency-cloudfront-webacl"
+    metric_name                = "ai-website-agency-cloudfront-webacl"
     sampled_requests_enabled   = true
   }
 
   tags = {
-    Name = "website-agency-cloudfront"
+    Name = "ai-website-agency-cloudfront"
   }
 }
