@@ -13,12 +13,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
-// API is the subset of *dynamodb.Client that shared packages depend on. It is
-// deliberately minimal; widen it as later iterations need more operations
-// (pkg/cost, pkg/killswitch will add Get/Update). The concrete *dynamodb.Client
-// satisfies it structurally.
+// API is the subset of *dynamodb.Client that shared packages depend on. The
+// concrete *dynamodb.Client satisfies it structurally. Widen as later
+// iterations need more operations.
 type API interface {
 	PutItem(ctx context.Context, in *dynamodb.PutItemInput, opts ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+	GetItem(ctx context.Context, in *dynamodb.GetItemInput, opts ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	UpdateItem(ctx context.Context, in *dynamodb.UpdateItemInput, opts ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 }
 
 var (
