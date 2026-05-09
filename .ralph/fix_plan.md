@@ -66,7 +66,7 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 
 ## High Priority — Iteration 0.E: `lambdas/pkg/` extensions
 
-- [ ] **0.E.1** `pkg/events/`: envelope, publisher, consumer wrapper.
+- [x] **0.E.1** `pkg/events/`: envelope, publisher, consumer wrapper. *(done 2026-05-09: `Envelope[T]` generic with eventId auto-gen + `WithCorrelation`/`WithCausation` chainers + `Validate`; `Publisher` with injectable `EventBridgeAPI` and `EVENT_BUS_NAME` env-var bootstrap; `Unmarshal` / `FromEventBridge` / `FromSQS` decoders; `Consume[T]` partial-batch-failure SQS dispatcher. 89.1% coverage.)*
 - [ ] **0.E.2** `pkg/idempotency/`: `WithIdempotency[T]` per `stdlib/idempotency-patterns.md`.
 - [ ] **0.E.3** `pkg/cost/`: `Record`, `Get`, `Assert`, `WithCostCap`.
 - [ ] **0.E.4** `pkg/bedrock/`: `InvokeStructured[T]` per `stdlib/json-output-conventions.md`.
