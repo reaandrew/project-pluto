@@ -1,8 +1,25 @@
-# Claude Code instructions — ai-website-agency
+# Claude Code instructions — website-agency
 
-This is an AI-assisted outbound website-redesign pipeline. The implementation repo is **created from the GitHub template `reaandrew/cloud-skeleton`** and customized via `bin/init.sh`. This spec repo (`reaandrew/ai-website-agency-spec`) is the canonical source for the spec; copy `.ralph/` and `CLAUDE.md` into the implementation repo on initialization.
+This is an AI-assisted outbound website-redesign pipeline. The implementation repo is **created from the GitHub template `reaandrew/cloud-skeleton`** and customized via `bin/init.sh`. This spec repo (`reaandrew/ai-website-agency-spec`) is the canonical source for the spec; copy `.ralph/` and `CLAUDE.md` into the implementation repo (`reaandrew/ai-website-agency`) on initialization.
 
 Architecture, data, events, prompts, UI, iteration plan, and quality rules live under `.ralph/specs/`. Claude-based agents/commands/hooks live under `.claude/`.
+
+## Current state — where to pick up (last updated 2026-05-09)
+
+- **Iter 0.A → 0.E shipped.** All nine shared `lambdas/pkg/` libraries are merged on `main` of the impl repo: `events`, `idempotency`, `cost`, `bedrock`, `politefetch`, `schemas`, `prompts`, `passcode`, `killswitch`. Bootstrap (0.A.4–0.A.6) done; per-PR ephemeral envs working; CI efficiency rewrite (0.B) in place; agency-specific Terraform (0.C) live; Cloudflare R2 + Worker preview hosting (0.D) deployed.
+- **Iter 0.F.1 in flight** — PR #16 on the impl repo: `terraform/pipeline-settings.tf` seeds the singleton `PipelineSettings` row (`pk=SETTINGS#PIPELINE, sk=CURRENT`) via `aws_dynamodb_table_item` with `lifecycle.ignore_changes=[item]`. `aws-setup/main.tf` was extended this session to grant the OIDC role `dynamodb:PutItem/GetItem/DeleteItem` (applied manually via `aws-vault exec personal_iphone -- terraform apply`). PR is green; awaiting merge.
+- **Pick up at iter 0.F.2 next** — `lambdas/api-settings/`: `GET /settings`, `PATCH /settings`, operator-only via Cognito group claim. After that: 0.F.3 (kill-switch enforcement at every consumer entry), 0.F.4 (cost-ledger items + daily rollover Lambda at 00:05 UTC).
+- After 0.F: **iter 0.G** (admin shell — `react-router-dom`, auth guard, Settings page with cap sliders, access-strip skeleton), then **iter 1** (Targeting Profile + Discovery — first real pipeline work).
+
+## Operational gotchas worth remembering
+
+- **IAM eventual-consistency lag.** Changes to `aws-setup/` IAM policies take 30–60s to propagate into newly assumed STS sessions. If a CI deploy fails with `AccessDenied` immediately after an `aws-setup/` apply, push an empty commit (`git commit --allow-empty -m "ci: retrigger after IAM propagation"`) to retrigger. Hit this on PR #16.
+- **`aws-vault` is not invokable from Claude's Bash tool** (no TTY for the MFA prompt). For one-off `aws-setup/` applies, ask the user to type `! cd aws-setup && aws-vault exec personal_iphone -- terraform apply` so the prompt lands directly in their interactive session — the output streams back into the conversation.
+- **PR titles must be Conventional Commits** (`feat:` / `fix:` / `chore:` / `docs:` / `ci:`) — the `conventional-title` GH Action is required and will block merge.
+- **Three Go-lint rules that bite after-the-fact** (run `golangci-lint run --timeout=5m ./...` from `lambdas/` before pushing):
+  - `errcheck` rejects bare error returns. Use `_ = fn(...)` to discard explicitly.
+  - `semgrep` rejects `math/rand` everywhere. Use `crypto/rand` + `binary.LittleEndian.Uint64` for jitter / non-crypto randomness.
+  - `semgrep` rejects `fmt.Fprintf` / `Fprintln` / `w.Write([]byte(...))` to `http.ResponseWriter`. Use `json.NewEncoder(w).Encode(v)` — the encoder hides the write behind the stdlib boundary.
 
 ## Read this first
 - `.ralph/specs/00-overview.md` — what we're building and the operating principles.
@@ -24,6 +41,10 @@ Everything else (`02-data-model.md`, `03-events.md`, `05-capacity-and-cost.md`, 
 
 ## When invoked directly (not in Ralph's loop)
 Treat `.ralph/fix_plan.md` as the priority list, but do not produce the `---RALPH_STATUS---` block. Use a normal short summary at the end of the response.
+
+## After opening a PR — watch CI
+
+Opening the PR is not the end of the task. Once `gh pr create` returns the URL, poll `gh pr checks <num>` until every required check has settled (passed, failed, or skipped). If anything fails, read the failing log (`gh run view <run-id> --log-failed`), fix the root cause, push, and keep watching. Only stop watching once the PR is green or you have explicit confirmation from the user to leave it. Do not announce a task complete while checks are still running or failing — that's exactly when CI catches the things local lint/test missed (semgrep cloud rules, IAM propagation, etc.).
 
 ## AWS Authentication
 
