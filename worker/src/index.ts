@@ -29,32 +29,46 @@ export interface Env {
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname;
-
-    if (path === "/healthz") {
-      return new Response("OK", { status: 200, headers: { "content-type": "text/plain" } });
-    }
-
-    const sitesMatch = /^\/sites\/([a-z0-9_-]+)(?:\/(.*))?$/.exec(path);
-    if (sitesMatch) {
-      const websiteId = sitesMatch[1];
-      const assetPath = sitesMatch[2] ?? "";
-
-      if (request.method === "POST") {
-        return handlePasscodeSubmit(request, env, websiteId, url);
-      }
-      return serveAsset(request, env, websiteId, assetPath);
-    }
-
-    const screenshotMatch = /^\/screenshots\/([a-z0-9_-]+)\/(thumb|small|medium|large)\.png$/.exec(path);
-    if (screenshotMatch) {
-      return serveScreenshot(request, env, screenshotMatch[1], screenshotMatch[2]);
-    }
-
-    return new Response("Not Found", { status: 404 });
+    return withDefaultHeaders(await route(request, env));
   },
 } satisfies ExportedHandler<Env>;
+
+async function route(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  if (path === "/healthz") {
+    return new Response("OK", { status: 200, headers: { "content-type": "text/plain" } });
+  }
+
+  const sitesMatch = /^\/sites\/([a-z0-9_-]+)(?:\/(.*))?$/.exec(path);
+  if (sitesMatch) {
+    const websiteId = sitesMatch[1];
+    const assetPath = sitesMatch[2] ?? "";
+
+    if (request.method === "POST") {
+      return handlePasscodeSubmit(request, env, websiteId, url);
+    }
+    return serveAsset(request, env, websiteId, assetPath);
+  }
+
+  const screenshotMatch = /^\/screenshots\/([a-z0-9_-]+)\/(thumb|small|medium|large)\.png$/.exec(path);
+  if (screenshotMatch) {
+    return serveScreenshot(request, env, screenshotMatch[1], screenshotMatch[2]);
+  }
+
+  return new Response("Not Found", { status: 404 });
+}
+
+// Quality rule (10-quality-rules.md § Rule 2): every response from the preview
+// Worker must carry `X-Robots-Tag: noindex, nofollow` so search engines never
+// index passcode-gated content even if a URL leaks. Applied uniformly here so
+// no individual route can forget.
+function withDefaultHeaders(res: Response): Response {
+  const headers = new Headers(res.headers);
+  if (!headers.has("x-robots-tag")) headers.set("x-robots-tag", "noindex, nofollow");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
 
 async function serveAsset(
   request: Request,

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { hashPasscode, validatePasscode, signCookie, verifyCookie, COOKIE_NAME } from "../src/passcode";
+import worker from "../src/index";
 
 const SALT = "test-salt-not-real";
 
@@ -64,5 +65,38 @@ describe("signed cookie", () => {
   it("returns false on missing cookie", async () => {
     expect(await verifyCookie("", "site-abc", SALT)).toBe(false);
     expect(await verifyCookie("other=value", "site-abc", SALT)).toBe(false);
+  });
+});
+
+describe("response headers", () => {
+  // Mock env — only PASSCODE_SALT is needed for the routes we hit here.
+  const env = {
+    PASSCODE_SALT: SALT,
+    ENVIRONMENT: "test",
+    PREVIEWS: {} as R2Bucket,
+    PREVIEW_PASSCODES_KV: {
+      get: async () => null,
+    } as unknown as KVNamespace,
+  };
+
+  it("/healthz carries X-Robots-Tag noindex,nofollow", async () => {
+    const res = await worker.fetch(new Request("https://example.test/healthz"), env, {} as ExecutionContext);
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+
+  it("passcode form response carries X-Robots-Tag noindex,nofollow", async () => {
+    const res = await worker.fetch(
+      new Request("https://example.test/sites/abc"),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(res.headers.get("content-type")).toContain("text/html");
+  });
+
+  it("404 response carries X-Robots-Tag noindex,nofollow", async () => {
+    const res = await worker.fetch(new Request("https://example.test/nope"), env, {} as ExecutionContext);
+    expect(res.status).toBe(404);
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
   });
 });

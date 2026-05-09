@@ -20,9 +20,12 @@ terraform {
     }
   }
 
+  # Per skeleton pitfall #9: backend key is intentionally NOT set here. CI supplies
+  # `-backend-config="key=terraform/cloudflare/<env>/terraform.tfstate"` so each env
+  # gets its own state file. A bare `terraform init` (no -backend-config) will
+  # prompt for the key, which is the right safety property.
   backend "s3" {
     bucket       = "ai-website-agency-terraform-state-276447169330"
-    key          = "terraform/cloudflare/terraform.tfstate"
     region       = "eu-west-2"
     use_lockfile = true
     encrypt      = true
