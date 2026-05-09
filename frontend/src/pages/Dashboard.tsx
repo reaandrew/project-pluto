@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { getHealth, type HealthResponse } from '../api';
 
-export default function Hello() {
+// Dashboard is the root route ('/') of the admin shell. For now it surfaces
+// the BFF /health response — same content the iter-0.A skeleton showed via
+// pages/Hello.tsx. Iter 0.G.3+ will replace this with real pipeline KPIs
+// (today's discoveries / audits / previews / queue depth, etc.).
+export default function Dashboard() {
   const [data, setData] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,7 +36,12 @@ export default function Hello() {
   }
   return (
     <div>
-      <h2>API health</h2>
+      <h2>Dashboard</h2>
+      <p style={{ color: '#666' }}>
+        Pipeline KPIs land here in a later iteration. For now this page just
+        proves the BFF round-trips.
+      </p>
+      <h3 style={{ marginTop: '1.5rem' }}>BFF /health</h3>
       <pre
         style={{
           background: '#0b0b0b',
