@@ -53,19 +53,37 @@ variable "cloudflare_account_id" {
 
 variable "preview_zone_name" {
   type        = string
-  default     = "techar.ch"
-  description = "Cloudflare zone name (the parent domain). Looked up via data source — no zone-id GH secret needed."
-}
-
-variable "preview_subdomain" {
-  type        = string
   default     = "previews.agency.techar.ch"
-  description = "Hostname under which the Worker serves passcode-gated previews. Per-env routing happens via Worker code, not DNS."
+  description = "Cloudflare zone name. The Worker serves traffic for this zone + its subdomains. Must be added to your Cloudflare account once (dash → Add Site → Free plan)."
 }
 
-# Look up the zone by name. Token must have Zone Read on this zone.
+# Look up the Cloudflare zone by name. The user adds it via dash once
+# (`dash.cloudflare.com` → Add Site → free plan); we don't create it via
+# Terraform because the existing API token's scope (Zone:DNS Edit) is locked
+# to specific zones, not Account-level zone-creation. After the user adds it,
+# this data source resolves and the apply continues.
 data "cloudflare_zone" "preview" {
   name = var.preview_zone_name
+}
+
+# NS delegation record in the AWS-managed agency.techar.ch zone, pointing the
+# previews.agency.techar.ch subdomain at Cloudflare's nameservers (which the
+# zone-data-source exposes). This is what activates the Cloudflare zone —
+# Cloudflare polls public DNS and flips its zone state from PENDING → ACTIVE.
+data "aws_ssm_parameter" "agency_zone_id" {
+  name = "/ai-website-agency/route53/zone_id"
+}
+
+resource "aws_route53_record" "cloudflare_delegation" {
+  # Only the production env's apply creates this — it's a singleton record at
+  # `previews.agency.techar.ch` regardless of how many preview envs are running.
+  count = local.is_production ? 1 : 0
+
+  zone_id = data.aws_ssm_parameter.agency_zone_id.value
+  name    = var.preview_zone_name
+  type    = "NS"
+  ttl     = 300
+  records = data.cloudflare_zone.preview.name_servers
 }
 
 locals {
@@ -132,7 +150,7 @@ resource "cloudflare_ruleset" "preview_rate_limit" {
 # Terraform claims the route binding so the host-pattern is in code.
 resource "cloudflare_workers_route" "preview" {
   zone_id     = data.cloudflare_zone.preview.id
-  pattern     = local.is_production ? "${var.preview_subdomain}/*" : "${local.env_sanitized}.${var.preview_subdomain}/*"
+  pattern     = local.is_production ? "${var.preview_zone_name}/*" : "${local.env_sanitized}.${var.preview_zone_name}/*"
   script_name = "ai-website-agency-preview${local.env_suffix}"
 }
 
@@ -147,4 +165,9 @@ output "kv_namespace_id" {
 
 output "worker_route_pattern" {
   value = cloudflare_workers_route.preview.pattern
+}
+
+output "delegation_nameservers" {
+  value       = data.cloudflare_zone.preview.name_servers
+  description = "Cloudflare-assigned nameservers for the preview zone. Production env's terraform apply writes these as NS records in the agency.techar.ch Route53 zone."
 }
