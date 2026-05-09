@@ -26,12 +26,36 @@ const (
 // Every field is read on every consumer entry; if the spec adds new fields,
 // add them here so the cache reflects them.
 type Settings struct {
-	PipelineEnabled bool       `json:"pipelineEnabled" dynamodbav:"pipelineEnabled"`
-	Stages          StageFlags `json:"stages"          dynamodbav:"stages"`
-	Caps            Caps       `json:"caps"            dynamodbav:"caps"`
-	Thresholds      Thresholds `json:"thresholds"      dynamodbav:"thresholds"`
-	Budgets         Budgets    `json:"budgets"         dynamodbav:"budgets"`
+	PipelineEnabled   bool              `json:"pipelineEnabled"   dynamodbav:"pipelineEnabled"`
+	Stages            StageFlags        `json:"stages"            dynamodbav:"stages"`
+	Caps              Caps              `json:"caps"              dynamodbav:"caps"`
+	Thresholds        Thresholds        `json:"thresholds"        dynamodbav:"thresholds"`
+	Budgets           Budgets           `json:"budgets"           dynamodbav:"budgets"`
+	StagePauseReasons StagePauseReasons `json:"stagePauseReasons" dynamodbav:"stagePauseReasons"`
 }
+
+// StagePauseReasons records WHY each disabled stage is disabled, mirroring
+// StageFlags one-for-one. Empty string = "not paused, or paused without a
+// machine-known reason" (e.g. operator manually toggled it off via
+// /settings — those re-enable manually too). The reserved value
+// "budget" means the stage was paused by pkg/cost when the daily cap
+// was hit; the cost-rollover Lambda (iter 0.F.4) re-enables those at
+// 00:05 UTC daily.
+//
+// Operator-flipped pauses do not get a reason set — keeping them paused
+// across rollover is the right behaviour. Only "budget" pauses are
+// transient.
+type StagePauseReasons struct {
+	Discovery string `json:"discovery,omitempty" dynamodbav:"discovery,omitempty"`
+	Audit     string `json:"audit,omitempty"     dynamodbav:"audit,omitempty"`
+	Preview   string `json:"preview,omitempty"   dynamodbav:"preview,omitempty"`
+	Outreach  string `json:"outreach,omitempty"  dynamodbav:"outreach,omitempty"`
+}
+
+// PauseReasonBudget is the reserved value the cost-cap mechanism writes
+// into StagePauseReasons. The rollover Lambda matches against this
+// constant, so a typo in either place would break the rollover loop.
+const PauseReasonBudget = "budget"
 
 // StageFlags are the four operator-facing toggles. Internal stages roll up
 // to one of these — see the StageMap docstring.
