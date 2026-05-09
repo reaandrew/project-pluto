@@ -13,7 +13,6 @@ data "archive_file" "api_hello" {
   output_path = "${path.module}/.terraform/api-hello.zip"
 }
 
-# nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
 resource "aws_lambda_function" "api_hello" {
   filename         = data.archive_file.api_hello.output_path
   function_name    = "ai-website-agency-api-hello${local.env_suffix}"
@@ -29,6 +28,7 @@ resource "aws_lambda_function" "api_hello" {
     mode = "Active"
   }
 
+  # nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
   environment {
     variables = {
       ITEMS_TABLE = aws_dynamodb_table.items.name
@@ -79,7 +79,6 @@ data "archive_file" "api_settings" {
   output_path = "${path.module}/.terraform/api-settings.zip"
 }
 
-# nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
 resource "aws_lambda_function" "api_settings" {
   filename         = data.archive_file.api_settings.output_path
   function_name    = "ai-website-agency-api-settings${local.env_suffix}"
@@ -95,6 +94,7 @@ resource "aws_lambda_function" "api_settings" {
     mode = "Active"
   }
 
+  # nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
   environment {
     variables = {
       ITEMS_TABLE = aws_dynamodb_table.items.name
