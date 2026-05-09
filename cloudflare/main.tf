@@ -57,37 +57,22 @@ variable "preview_zone_name" {
   description = "Cloudflare zone name. The Worker serves traffic for this zone + its subdomains. Must be added to your Cloudflare account once (dash → Add Site → Free plan)."
 }
 
-# Cloudflare zone — created via API. Requires the token to have
-# Account-level zone-management permission (Account: Account Settings: Edit,
-# or Zone: Zone: Edit on All zones). If the token only has Zone DNS:Edit on
-# specific zones, this CreateZone call returns 403 and the apply fails with
-# a clear permission-denied error.
+# Cloudflare zone is added by the user via the dash ONCE, before this stack
+# can apply (chicken-and-egg: terraform's data source reads at plan time,
+# which means every env's plan needs the zone to already exist).
 #
-# Production-env applies own this resource; preview-env applies just READ
-# the same zone (terraform's `cloudflare_zone` resource is per-account-zone,
-# not per-env, so we use a `count` guard to avoid every preview env trying
-# to recreate the same zone).
-resource "cloudflare_zone" "preview" {
-  count = local.is_production ? 1 : 0
-
-  account_id = var.cloudflare_account_id
-  zone       = var.preview_zone_name
-  plan       = "free"
-  type       = "full"
-}
-
-# Preview envs reference the production-created zone via data source.
+# Setup (one-time, ~30s):
+#   1. dash.cloudflare.com → Add Site → previews.agency.techar.ch → Free plan
+#   2. Cloudflare assigns nameservers + leaves the zone in Pending status
+#   3. terraform apply (this stack) writes the NS delegation record to Route53
+#      so Cloudflare can flip the zone to Active.
 data "cloudflare_zone" "preview" {
   name = var.preview_zone_name
-
-  # On the very first production apply, the zone resource above creates the zone
-  # so the data source resolves only after that completes.
-  depends_on = [cloudflare_zone.preview]
 }
 
 # NS delegation record in the AWS-managed agency.techar.ch zone, pointing
-# previews.agency.techar.ch at Cloudflare's nameservers. Production-only — the
-# delegation is a singleton record regardless of how many preview envs run.
+# previews.agency.techar.ch at Cloudflare's nameservers. Production-only —
+# the delegation is a singleton record regardless of how many preview envs run.
 data "aws_ssm_parameter" "agency_zone_id" {
   name = "/ai-website-agency/route53/zone_id"
 }
@@ -99,7 +84,7 @@ resource "aws_route53_record" "cloudflare_delegation" {
   name    = var.preview_zone_name
   type    = "NS"
   ttl     = 300
-  records = cloudflare_zone.preview[0].name_servers
+  records = data.cloudflare_zone.preview.name_servers
 }
 
 locals {
