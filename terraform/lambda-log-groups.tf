@@ -9,6 +9,12 @@ resource "aws_cloudwatch_log_group" "api_hello" {
   tags              = local.common_tags
 }
 
+resource "aws_cloudwatch_log_group" "api_settings" {
+  name              = "/aws/lambda/ai-website-agency-api-settings${local.env_suffix}"
+  retention_in_days = 30
+  tags              = local.common_tags
+}
+
 resource "aws_cloudwatch_log_group" "api_gateway" {
   name              = "/aws/apigateway/ai-website-agency${local.env_suffix}"
   retention_in_days = 30
