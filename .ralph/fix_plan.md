@@ -16,9 +16,9 @@ Marking convention: `[ ]` not done, `[~]` in progress, `[x]` done.
 
 > **RALPH: STOP HERE.** Items 0.A.4–0.A.6 are a one-time human ceremony — they require iPhone-MFA-gated `aws-vault exec` and editing NS records on the parent zone. Do **not** attempt `aws-vault`, `terraform apply`, or DNS edits autonomously. When you reach this point in the plan, emit `STATUS: BLOCKED` with `RECOMMENDATION` pointing the operator at `docs/BOOTSTRAP.md` and stop the loop. After the operator completes 0.A.4–0.A.6 and ticks the boxes, you'll resume cleanly at 0.A.7.
 
-- [ ] **0.A.4** **HUMAN ONLY.** AWS bootstrap per `docs/BOOTSTRAP.md`: state bucket, first apply, NS records, second apply, SSM contract, GH secrets. Run with `aws-vault exec personal_iphone -- terraform …` from `aws-setup/`.
-- [ ] **0.A.5** **HUMAN ONLY.** First production deploy via `git push origin main`; verify all three URLs respond.
-- [ ] **0.A.6** **HUMAN ONLY.** Verify per-PR env: open + close a no-op PR; cleanup must succeed.
+- [x] **0.A.4** **HUMAN ONLY.** AWS bootstrap per `docs/BOOTSTRAP.md`: state bucket, first apply, NS records, second apply, SSM contract, GH secrets. Run with `aws-vault exec personal_iphone -- terraform …` from `aws-setup/`. *(done 2026-05-08: confirmed by green Deploy workflow on push-to-main + `https://agency.techar.ch/` returning 200.)*
+- [x] **0.A.5** **HUMAN ONLY.** First production deploy via `git push origin main`; verify all three URLs respond. *(done 2026-05-09: Deploy run 25595407615 ✅ on `main` after #5 merge; admin `https://agency.techar.ch/` → 200; API GW + Lambda exist (`/healthz` route is iter-0.E work). Worker is on `*.workers.dev` for now — `previews.agency.techar.ch` route was intentionally dropped in commit `f5f8dff`.)*
+- [x] **0.A.6** **HUMAN ONLY.** Verify per-PR env: open + close a no-op PR; cleanup must succeed. *(done 2026-05-08/09: PRs #1–#5 each opened-and-merged with green Deploy + Cloudflare workflows on the `pull_request` trigger.)*
 - [x] **0.A.7** Create stub `CLAUDE.md` files in `lambdas/`, `terraform/`, `worker/`, `frontend/` per `11-agents.md` § "Sub-directory CLAUDE.md files". Each is short and references the spec. *(done 2026-05-08; `worker/` directory created as a placeholder for iter 0.D.2.)*
 
 ## High Priority — Iteration 0.B: CI Efficiency
