@@ -253,7 +253,10 @@ resource "aws_iam_role_policy" "lambda_deploy" {
         Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
         Condition = {
           StringEquals = {
-            "iam:PassedToService" = "lambda.amazonaws.com"
+            "iam:PassedToService" = [
+              "lambda.amazonaws.com",
+              "scheduler.amazonaws.com", # iter 0.C.2 — EventBridge Scheduler invoke role
+            ]
           }
         }
       },
@@ -430,10 +433,14 @@ resource "aws_iam_role_policy" "ssm_access" {
           "ssm:RemoveTagsFromResource",
           "ssm:ListTagsForResource",
         ]
-        # CI manages app secrets per env; aws-setup owns the cert/cf/route53/s3 paths.
+        # CI manages app secrets + iter-0.C resource handles per env; aws-setup
+        # still owns the cert/cf/route53/s3 paths.
         Resource = [
           "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/app/*",
           "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/secret/*",
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/kms/*",     # iter 0.C.8 — passcode CMK alias ARN
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/cognito/*", # future: cognito IDs for the admin app
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/ses/*",     # future: SES handles for the sender Lambda
         ]
       },
     ]
@@ -478,6 +485,105 @@ resource "aws_iam_role_policy" "sns" {
       Effect   = "Allow"
       Action   = ["sns:*"]
       Resource = "arn:aws:sns:*:${var.aws_account_id}:ai-website-agency-*"
+    }]
+  })
+}
+
+# 13. Cognito (iter 0.C.3 — operator user pool + Hosted UI + JWT authorizer).
+resource "aws_iam_role_policy" "cognito" {
+  name = "cognito"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["cognito-idp:*"]
+      Resource = "*"
+    }]
+  })
+}
+
+# 14. EventBridge bus + archive + rules (iter 0.C.2). Resource pattern matches the
+# project's per-env event buses + their archives + their rules.
+resource "aws_iam_role_policy" "events" {
+  name = "events"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["events:*"]
+      Resource = [
+        "arn:aws:events:*:${var.aws_account_id}:event-bus/pipeline*",
+        "arn:aws:events:*:${var.aws_account_id}:archive/pipeline*",
+        "arn:aws:events:*:${var.aws_account_id}:rule/pipeline*/*",
+      ]
+    }]
+  })
+}
+
+# 15. EventBridge Scheduler (iter 0.C.2 — schedule group + schedules).
+resource "aws_iam_role_policy" "scheduler" {
+  name = "scheduler"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["scheduler:*"]
+      Resource = [
+        "arn:aws:scheduler:*:${var.aws_account_id}:schedule-group/pipeline*",
+        "arn:aws:scheduler:*:${var.aws_account_id}:schedule/pipeline*/*",
+      ]
+    }]
+  })
+}
+
+# 16. KMS (iter 0.C.8 — passcode-cleartext CMK + alias). Resource = "*" because
+# CreateKey + TagResource don't accept a resource constraint at create time.
+resource "aws_iam_role_policy" "kms" {
+  name = "kms"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "kms:CreateKey",
+        "kms:DescribeKey",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:GetKeyPolicy",
+        "kms:PutKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:EnableKeyRotation",
+        "kms:DisableKeyRotation",
+        "kms:UpdateKeyDescription",
+        "kms:ListResourceTags",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:CreateAlias",
+        "kms:UpdateAlias",
+        "kms:DeleteAlias",
+        "kms:ListAliases",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+# 17. SES (iter 0.C.4). Both v1 (`ses:*`) and v2 (`sesv2:*`) actions are needed
+# because the AWS Terraform provider mixes them. Domain identity is project-wide
+# (resource pattern `outreach.<base_domain>` covered by *) — narrow if needed.
+resource "aws_iam_role_policy" "ses" {
+  name = "ses"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ses:*", "sesv2:*"]
+      Resource = "*"
     }]
   })
 }

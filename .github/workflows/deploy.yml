@@ -238,8 +238,13 @@ jobs:
   # Build (parallel; depends on quality + security)
   # ---------------------------------------------------------------------------
   discover-lambdas:
+    # ALWAYS runs on a code-changed pipeline run (not just lambdas_changed). The
+    # `deploy` step needs the real Lambda binaries even when only terraform/
+    # changed — otherwise the placeholder bootstrap (pitfall #3) goes live and
+    # smoke-tests fail with 500. The build itself is cache-keyed on a source
+    # hash so an unchanged Lambda is a ~10-30s cache restore, not a rebuild.
     needs: pre-flight
-    if: needs.pre-flight.outputs.lambdas_changed == 'true'
+    if: needs.pre-flight.outputs.code_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
@@ -258,8 +263,16 @@ jobs:
           if [ "${ARR}" = "[]" ]; then echo "has=false" >> "$GITHUB_OUTPUT"; else echo "has=true" >> "$GITHUB_OUTPUT"; fi
 
   build-go-lambdas:
+    # See discover-lambdas — always builds when the pipeline runs (cache-keyed
+    # on source hash, so unchanged Lambdas are cheap restores). go-quality is
+    # only required if lambdas_changed (otherwise it's skipped); the `always()`
+    # tolerance below treats a skipped quality job as success.
     needs: [pre-flight, discover-lambdas, go-quality, secret-scan]
-    if: needs.discover-lambdas.outputs.has_go_lambdas == 'true' && needs.pre-flight.outputs.lambdas_changed == 'true'
+    if: |
+      always() &&
+      needs.discover-lambdas.outputs.has_go_lambdas == 'true' &&
+      (needs.go-quality.result == 'success' || needs.go-quality.result == 'skipped') &&
+      needs.secret-scan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -311,8 +324,15 @@ jobs:
           if-no-files-found: error
 
   build-frontend:
+    # ALWAYS runs when the pipeline runs — same reasoning as build-go-lambdas.
+    # `npm ci` + `npm run build` for an unchanged tree completes in ~15-25s
+    # thanks to the npm cache, so the cost is acceptable to keep deploys safe.
     needs: [pre-flight, frontend-quality, secret-scan]
-    if: needs.pre-flight.outputs.frontend_changed == 'true'
+    if: |
+      always() &&
+      needs.pre-flight.outputs.code_changed == 'true' &&
+      (needs.frontend-quality.result == 'success' || needs.frontend-quality.result == 'skipped') &&
+      needs.secret-scan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
