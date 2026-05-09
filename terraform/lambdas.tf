@@ -1,9 +1,19 @@
+# nosemgrep rationale (aws-lambda-environment-unencrypted): the env vars
+# we set on every Lambda — ITEMS_TABLE, ENVIRONMENT, LOG_LEVEL, GIT_SHA —
+# are non-secret build-time configuration. Lambda already encrypts the
+# environment block at rest with an AWS-managed key (`aws/lambda`); the
+# rule wants a customer-managed `kms_key_arn`, which only matters when
+# the env values are themselves secrets. We don't put secrets there —
+# secrets come via SSM Parameter Store at runtime (terraform/iam.tf
+# `ssm_read` policy). Suppression is applied per-function below.
+
 data "archive_file" "api_hello" {
   type        = "zip"
   source_file = "${path.module}/../lambdas/api-hello/bootstrap"
   output_path = "${path.module}/.terraform/api-hello.zip"
 }
 
+# nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
 resource "aws_lambda_function" "api_hello" {
   filename         = data.archive_file.api_hello.output_path
   function_name    = "ai-website-agency-api-hello${local.env_suffix}"
@@ -69,6 +79,7 @@ data "archive_file" "api_settings" {
   output_path = "${path.module}/.terraform/api-settings.zip"
 }
 
+# nosemgrep: terraform.aws.security.aws-lambda-environment-unencrypted.aws-lambda-environment-unencrypted
 resource "aws_lambda_function" "api_settings" {
   filename         = data.archive_file.api_settings.output_path
   function_name    = "ai-website-agency-api-settings${local.env_suffix}"
