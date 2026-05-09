@@ -1,13 +1,13 @@
 // Package prompts hosts the project's versioned Bedrock prompt templates per
 // .ralph/specs/07-bedrock-prompts.md. One file per prompt-version named
 // `<name>_v<n>.go` (e.g. audit_qualitative_v1.go), each declaring a single
-// exported `Prompt[T]` value. Consumer Lambdas wire a prompt into Bedrock by:
+// exported `Prompt[T]` value. Consumer Lambdas call:
 //
-//  1. Computing the prompt's per-call cache key per the prompt's caching
-//     policy (the document's § "Caching policy" tells you which fields).
-//  2. Calling Apply(prompt, messages, capUSD, cacheKey) to turn the
-//     Prompt[T] into a bedrock.InvokeInput[T].
-//  3. Passing that to bedrock.InvokeStructured[T].
+//	out, err := prompts.Invoke(ctx, prompt, messages, capUSD, cacheKey)
+//
+// which runs bedrock.InvokeStructured AND the prompt's PostValidate hook so
+// neither step can be silently skipped. Apply is the low-level helper that
+// just builds the bedrock.InvokeInput; prefer Invoke.
 //
 // The schema for the tool's output (T) is computed at package init via
 // schemas.MustJSONSchemaFor[T] — fast-fail at cold start beats a stream of
@@ -15,9 +15,11 @@
 package prompts
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -49,6 +51,14 @@ type Prompt[T any] struct {
 	// to bedrock.DefaultCacheTTL (30d).
 	CacheTTL time.Duration
 
+	// PostValidate is run on the unmarshalled tool-use output after schema
+	// validation passes. Use it for rules JSON Schema can't express — for
+	// example email.v1's "body must contain previewUrl exactly once",
+	// spec.v1's "no testimonial-shaped sections", or "wordCount <= 200".
+	// A non-nil error fails Invoke and the consumer Lambda routes the
+	// event to DLQ. Optional — set nil when JSON Schema covers everything.
+	PostValidate func(T) error
+
 	// Schema is filled by New[T]; do not set directly.
 	Schema json.RawMessage
 }
@@ -74,12 +84,49 @@ func New[T any](p Prompt[T]) Prompt[T] {
 		panic("prompts.New: MaxTokens must be > 0")
 	case p.Stage == "":
 		panic("prompts.New: Stage required")
+	case p.EstimateUSD <= 0:
+		panic("prompts.New: EstimateUSD must be > 0 (zero defeats cost.Assert)")
 	}
 	p.Schema = schemas.MustJSONSchemaFor[T]()
 	return p
 }
 
-// Apply assembles a bedrock.InvokeInput ready for InvokeStructured.
+// Invoke is the canonical caller entry: runs bedrock.InvokeStructured AND
+// the prompt's PostValidate hook in one call. Consumer Lambdas should always
+// use Invoke rather than calling Apply + bedrock.InvokeStructured separately
+// — that way no caller can silently skip the post-validator a prompt
+// declares.
+//
+//	out, err := prompts.Invoke(ctx, AuditQualitativeV1, msgs, settings.AuditCap, cacheKey)
+//
+// Errors propagate from Bedrock (network, schema, validator) or from
+// PostValidate (post-schema rules). The handler treats either as DLQ-worthy.
+func Invoke[T any](
+	ctx context.Context,
+	p Prompt[T],
+	messages []bedrock.Message,
+	capUSD float64,
+	cacheKey string,
+) (T, error) {
+	var zero T
+	in := Apply(p, messages, capUSD, cacheKey)
+	out, err := bedrock.InvokeStructured(ctx, in)
+	if err != nil {
+		return zero, err
+	}
+	if p.PostValidate != nil {
+		if err := p.PostValidate(out); err != nil {
+			return zero, fmt.Errorf("prompts: %s post-validation: %w", p.ID, err)
+		}
+	}
+	return out, nil
+}
+
+// Apply assembles a bedrock.InvokeInput ready for InvokeStructured. Most
+// callers should use Invoke instead — Apply does NOT run PostValidate, so
+// it's only appropriate for tests or unusual paths that intentionally
+// bypass post-validation.
+//
 // `messages` is the caller-built user/assistant turn list. `capUSD` is the
 // per-stage budget cap (sourced from PipelineSettings via pkg/killswitch
 // in iter 0.E.9). `cacheKey` is the already-hashed deterministic key the

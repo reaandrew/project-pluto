@@ -1,12 +1,87 @@
 package prompts
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	bedrockruntime "github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+
 	"github.com/reaandrew/ai-website-agency/lambdas/pkg/bedrock"
+	"github.com/reaandrew/ai-website-agency/lambdas/pkg/ddb"
 )
+
+// --- test helpers (Bedrock + DDB fakes) ----------------------------------
+
+type fakeBedrockClient struct {
+	body []byte
+	err  error
+}
+
+func (f *fakeBedrockClient) InvokeModel(_ context.Context, _ *bedrockruntime.InvokeModelInput, _ ...func(*bedrockruntime.Options)) (*bedrockruntime.InvokeModelOutput, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &bedrockruntime.InvokeModelOutput{Body: f.body}, nil
+}
+
+type fakeDDBClient struct{}
+
+func (fakeDDBClient) PutItem(_ context.Context, _ *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	return &dynamodb.PutItemOutput{}, nil
+}
+func (fakeDDBClient) GetItem(_ context.Context, _ *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	return &dynamodb.GetItemOutput{}, nil
+}
+func (fakeDDBClient) UpdateItem(_ context.Context, _ *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	return &dynamodb.UpdateItemOutput{}, nil
+}
+
+// setupInvoke wires fakes for Bedrock + DDB for the duration of one test.
+// Returns the bedrock fake so the test can preload its response body or
+// error.
+func setupInvoke(t *testing.T) (*fakeBedrockClient, fakeDDBClient) {
+	t.Helper()
+	t.Setenv("ITEMS_TABLE", "items-test")
+	bedrockFake := &fakeBedrockClient{}
+	ddbFake := fakeDDBClient{}
+	bedrock.SetClient(bedrockFake)
+	ddb.SetClient(ddbFake)
+	t.Cleanup(func() {
+		bedrock.SetClient(nil)
+		ddb.SetClient(nil)
+	})
+	return bedrockFake, ddbFake
+}
+
+// makeBedrockResponse builds a synthetic Anthropic-on-Bedrock response body
+// where the only tool_use content is the named tool with the given input.
+func makeBedrockResponse(t *testing.T, toolName string, toolInput any, inTok, outTok int) []byte {
+	t.Helper()
+	inputRaw, err := json.Marshal(toolInput)
+	if err != nil {
+		t.Fatalf("marshal toolInput: %v", err)
+	}
+	body, err := json.Marshal(map[string]any{
+		"content": []map[string]any{{
+			"type":  "tool_use",
+			"name":  toolName,
+			"input": json.RawMessage(inputRaw),
+		}},
+		"usage": map[string]int{
+			"input_tokens":  inTok,
+			"output_tokens": outTok,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	return body
+}
 
 // dummyOut is a synthetic schema-bearing struct used to exercise the
 // framework. Real prompts use real schemas from pkg/schemas.
@@ -46,11 +121,12 @@ func TestNewFillsSchema(t *testing.T) {
 
 func TestNewPanicsOnMissingFields(t *testing.T) {
 	cases := map[string]Prompt[dummyOut]{
-		"no ID":        {ModelID: bedrock.ModelHaiku45, ToolName: "x", MaxTokens: 1, Stage: bedrock.StageAudit},
-		"no ModelID":   {ID: "x", ToolName: "x", MaxTokens: 1, Stage: bedrock.StageAudit},
-		"no ToolName":  {ID: "x", ModelID: bedrock.ModelHaiku45, MaxTokens: 1, Stage: bedrock.StageAudit},
-		"no MaxTokens": {ID: "x", ModelID: bedrock.ModelHaiku45, ToolName: "t", Stage: bedrock.StageAudit},
-		"no Stage":     {ID: "x", ModelID: bedrock.ModelHaiku45, ToolName: "t", MaxTokens: 1},
+		"no ID":          {ModelID: bedrock.ModelHaiku45, ToolName: "x", MaxTokens: 1, Stage: bedrock.StageAudit, EstimateUSD: 0.01},
+		"no ModelID":     {ID: "x", ToolName: "x", MaxTokens: 1, Stage: bedrock.StageAudit, EstimateUSD: 0.01},
+		"no ToolName":    {ID: "x", ModelID: bedrock.ModelHaiku45, MaxTokens: 1, Stage: bedrock.StageAudit, EstimateUSD: 0.01},
+		"no MaxTokens":   {ID: "x", ModelID: bedrock.ModelHaiku45, ToolName: "t", Stage: bedrock.StageAudit, EstimateUSD: 0.01},
+		"no Stage":       {ID: "x", ModelID: bedrock.ModelHaiku45, ToolName: "t", MaxTokens: 1, EstimateUSD: 0.01},
+		"no EstimateUSD": {ID: "x", ModelID: bedrock.ModelHaiku45, ToolName: "t", MaxTokens: 1, Stage: bedrock.StageAudit},
 	}
 	for name, p := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -174,5 +250,101 @@ func TestApplyResultIsAcceptableInputForBedrockBuildBody(t *testing.T) {
 
 	if in.ModelID == "" || in.PromptID == "" || in.ToolName == "" || in.MaxTokens <= 0 {
 		t.Errorf("Apply produced an InvokeInput InvokeStructured will reject: %+v", in)
+	}
+}
+
+// --- Invoke ---------------------------------------------------------------
+
+func TestInvokeRunsBedrockAndPostValidate(t *testing.T) {
+	bedrockFake, _ := setupInvoke(t)
+	bedrockFake.body = makeBedrockResponse(t, "produceDummy", dummyOut{Headline: "ok", Score: 50}, 100, 50)
+
+	postCalls := 0
+	p := New(Prompt[dummyOut]{
+		ID:          "dummy.v1",
+		ModelID:     bedrock.ModelHaiku45,
+		System:      "system",
+		ToolName:    "produceDummy",
+		MaxTokens:   500,
+		Stage:       bedrock.StageAudit,
+		EstimateUSD: 0.012,
+		PostValidate: func(d dummyOut) error {
+			postCalls++
+			if d.Headline == "" {
+				return errors.New("blank headline")
+			}
+			return nil
+		},
+	})
+
+	out, err := Invoke(context.Background(), p,
+		[]bedrock.Message{{Role: "user", Content: "x"}}, 5.0, "k")
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if out.Headline != "ok" || out.Score != 50 {
+		t.Errorf("output drift: %+v", out)
+	}
+	if postCalls != 1 {
+		t.Errorf("PostValidate called %d times, want 1", postCalls)
+	}
+}
+
+func TestInvokeSurfacesPostValidateError(t *testing.T) {
+	bedrockFake, _ := setupInvoke(t)
+	bedrockFake.body = makeBedrockResponse(t, "produceDummy", dummyOut{Headline: "fake-testimonial", Score: 50}, 100, 50)
+
+	p := New(Prompt[dummyOut]{
+		ID:          "dummy.v1",
+		ModelID:     bedrock.ModelHaiku45,
+		ToolName:    "produceDummy",
+		MaxTokens:   500,
+		Stage:       bedrock.StageAudit,
+		EstimateUSD: 0.012,
+		PostValidate: func(d dummyOut) error {
+			if strings.Contains(d.Headline, "fake") {
+				return errors.New("contains a banned word")
+			}
+			return nil
+		},
+	})
+	_, err := Invoke(context.Background(), p,
+		[]bedrock.Message{{Role: "user", Content: "x"}}, 5.0, "k")
+	if err == nil {
+		t.Fatal("expected post-validation error")
+	}
+	if !strings.Contains(err.Error(), "post-validation") || !strings.Contains(err.Error(), "dummy.v1") {
+		t.Errorf("error should reference the prompt + post-validation: %v", err)
+	}
+}
+
+func TestInvokeSkipsPostValidateWhenNil(t *testing.T) {
+	bedrockFake, _ := setupInvoke(t)
+	bedrockFake.body = makeBedrockResponse(t, "produceDummy", dummyOut{Headline: "ok", Score: 50}, 100, 50)
+
+	p := New(Prompt[dummyOut]{
+		ID:          "dummy.v1",
+		ModelID:     bedrock.ModelHaiku45,
+		ToolName:    "produceDummy",
+		MaxTokens:   500,
+		Stage:       bedrock.StageAudit,
+		EstimateUSD: 0.012,
+		// PostValidate intentionally nil.
+	})
+	if _, err := Invoke(context.Background(), p,
+		[]bedrock.Message{{Role: "user", Content: "x"}}, 5.0, "k"); err != nil {
+		t.Errorf("Invoke without PostValidate: %v", err)
+	}
+}
+
+func TestInvokeSurfacesBedrockError(t *testing.T) {
+	bedrockFake, _ := setupInvoke(t)
+	bedrockFake.err = errors.New("bedrock down")
+
+	p := validPrompt()
+	_, err := Invoke(context.Background(), p,
+		[]bedrock.Message{{Role: "user", Content: "x"}}, 5.0, "k")
+	if err == nil {
+		t.Fatal("expected bedrock error")
 	}
 }
