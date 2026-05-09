@@ -6,6 +6,10 @@ export interface RuntimeConfig {
   apiBaseUrl: string;
   environment: string;
   gitSha: string;
+  // Path prefix the SPA is served from. Production = '/'; per-PR preview =
+  // '/<env>'. BrowserRouter consumes this so the router's path matching
+  // lines up with what the browser shows.
+  basename?: string;
 }
 
 declare global {
@@ -19,10 +23,15 @@ const cfg: RuntimeConfig = window.__FINANCE_CONFIG__ ?? {
   apiBaseUrl: 'http://localhost:8080',
   environment: 'unknown',
   gitSha: 'unknown',
+  basename: '/',
 };
 
 export const ENV = cfg.environment;
 export const GIT_SHA = cfg.gitSha;
+// Default to '/' when runtime config doesn't carry a basename — that's
+// either a fresh local dev session or a production deploy from before
+// this field was introduced.
+export const BASENAME = cfg.basename ?? '/';
 
 export interface HealthResponse {
   message: string;
