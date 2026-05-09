@@ -137,18 +137,43 @@ jobs:
       - run: npm ci
         working-directory: worker
 
-      - name: Wrangler deploy
+      # Wrangler 3 doesn't accept --r2-bucket / --kv-namespace as CLI flags;
+      # bindings must come from wrangler.toml. Render a per-env wrangler.toml
+      # with the IDs Terraform just emitted, then deploy. The committed
+      # worker/wrangler.toml stays as the local-dev template.
+      - name: Render env-specific wrangler.toml
         working-directory: worker
         env:
           ENV_SUFFIX: ${{ env.ENVIRONMENT == 'production' && '' || format('-{0}', env.ENVIRONMENT) }}
           KV_NAMESPACE_ID: ${{ steps.cf.outputs.kv_id }}
           R2_BUCKET_NAME: ${{ steps.cf.outputs.r2_bucket }}
         run: |
-          npx wrangler deploy \
-            --name "ai-website-agency-preview${ENV_SUFFIX}" \
-            --var "ENVIRONMENT:${ENVIRONMENT}" \
-            --r2-bucket "PREVIEWS=${R2_BUCKET_NAME}" \
-            --kv-namespace "PREVIEW_PASSCODES_KV=${KV_NAMESPACE_ID}"
+          cat > wrangler.deploy.toml <<TOML
+          name = "ai-website-agency-preview${ENV_SUFFIX}"
+          main = "src/index.ts"
+          compatibility_date = "2024-09-23"
+          compatibility_flags = ["nodejs_compat"]
+
+          [observability]
+          enabled = true
+
+          [[r2_buckets]]
+          binding = "PREVIEWS"
+          bucket_name = "${R2_BUCKET_NAME}"
+
+          [[kv_namespaces]]
+          binding = "PREVIEW_PASSCODES_KV"
+          id = "${KV_NAMESPACE_ID}"
+
+          [vars]
+          ENVIRONMENT = "${ENVIRONMENT}"
+          TOML
+          echo "--- Rendered wrangler.deploy.toml ---"
+          cat wrangler.deploy.toml
+
+      - name: Wrangler deploy
+        working-directory: worker
+        run: npx wrangler deploy --config wrangler.deploy.toml
 
       - name: Sticky PR comment
         if: github.event_name == 'pull_request'
