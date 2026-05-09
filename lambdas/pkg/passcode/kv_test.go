@@ -3,7 +3,6 @@ package passcode
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,7 +47,7 @@ func TestKVPutSendsExpectedRequest(t *testing.T) {
 		gotCT = r.Header.Get("Content-Type")
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
-		fmt.Fprint(w, successResponse())
+		_, _ = w.Write([]byte(successResponse()))
 	})
 	_ = srv
 
@@ -85,7 +84,7 @@ func TestKVPutSendsExpectedRequest(t *testing.T) {
 func TestKVPutErrorOnCloudflare4xx(t *testing.T) {
 	withFakeCloudflare(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintln(w, `{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}`)
+		_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}`))
 	})
 	w := NewKVWriter("acct", "ns", "tok")
 	err := w.Put(context.Background(), "key", "val", nil)
@@ -97,7 +96,7 @@ func TestKVPutErrorOnCloudflare4xx(t *testing.T) {
 func TestKVPutErrorOnSuccessFalseStatusOK(t *testing.T) {
 	withFakeCloudflare(t, func(w http.ResponseWriter, r *http.Request) {
 		// Cloudflare can return 200 with success=false.
-		fmt.Fprintln(w, `{"success":false,"errors":[{"code":42,"message":"namespace not found"}]}`)
+		_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":42,"message":"namespace not found"}]}`))
 	})
 	w := NewKVWriter("acct", "ns", "tok")
 	err := w.Put(context.Background(), "key", "val", nil)
@@ -122,7 +121,7 @@ func TestKVPutValidatesArgs(t *testing.T) {
 
 	good := NewKVWriter("acct", "ns", "tok")
 	withFakeCloudflare(t, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, successResponse())
+		_, _ = w.Write([]byte(successResponse()))
 	})
 	if err := good.Put(context.Background(), "", "v", nil); err == nil {
 		t.Error("expected error for empty key")
@@ -144,7 +143,7 @@ func TestKVDeleteSendsExpectedRequest(t *testing.T) {
 		if !strings.HasSuffix(r.URL.Path, "/values/site-abc") {
 			t.Errorf("path = %s, expected /values/site-abc suffix", r.URL.Path)
 		}
-		fmt.Fprint(w, successResponse())
+		_, _ = w.Write([]byte(successResponse()))
 	})
 	w := NewKVWriter("acct", "ns", "tok")
 	if err := w.Delete(context.Background(), "site-abc"); err != nil {
