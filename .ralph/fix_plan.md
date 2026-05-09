@@ -78,7 +78,7 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 
 ## High Priority — Iteration 0.F: Pipeline controls
 
-- [ ] **0.F.1** Seed `PipelineSettings` singleton via `aws_dynamodb_table_item` with `lifecycle.ignore_changes=[item]`. Defaults per `05-capacity-and-cost.md`.
+- [x] **0.F.1** Seed `PipelineSettings` singleton via `aws_dynamodb_table_item` with `lifecycle.ignore_changes=[item]`. Defaults per `05-capacity-and-cost.md`. *(done 2026-05-09: `terraform/pipeline-settings.tf` creates `pk=SETTINGS#PIPELINE, sk=CURRENT` once with the documented defaults; `lifecycle.ignore_changes=[item]` mirrors the SSM-placeholder pattern (Pitfall #4) so operator edits via /settings persist across `terraform apply`s. Drift guard: `lambdas/pkg/killswitch/seed_test.go` parses the heredoc out of the .tf file, unwraps the DDB-typed JSON, and asserts it equals `Defaults()` — a doc bump that updates one without the other now fails the test.)*
 - [ ] **0.F.2** `lambdas/api-settings/`: `GET /settings`, `PATCH /settings`. Operator-only via Cognito group claim.
 - [ ] **0.F.3** Kill switch enforcement at every (currently-empty) consumer entry.
 - [ ] **0.F.4** Cost ledger items + daily rollover Lambda at 00:05 UTC.
