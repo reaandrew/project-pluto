@@ -51,16 +51,21 @@ variable "cloudflare_account_id" {
   description = "Cloudflare account ID (from dash.cloudflare.com top-right)."
 }
 
-variable "cloudflare_zone_id" {
+variable "preview_zone_name" {
   type        = string
-  description = "Zone ID for the parent domain (techar.ch — fetched via the cloudflare provider's data source if not provided)."
-  default     = ""
+  default     = "techar.ch"
+  description = "Cloudflare zone name (the parent domain). Looked up via data source — no zone-id GH secret needed."
 }
 
 variable "preview_subdomain" {
   type        = string
   default     = "previews.agency.techar.ch"
   description = "Hostname under which the Worker serves passcode-gated previews. Per-env routing happens via Worker code, not DNS."
+}
+
+# Look up the zone by name. Token must have Zone Read on this zone.
+data "cloudflare_zone" "preview" {
+  name = var.preview_zone_name
 }
 
 locals {
@@ -97,15 +102,15 @@ resource "cloudflare_workers_kv_namespace" "preview_passcodes" {
   title      = "PREVIEW_PASSCODES${local.env_suffix}"
 }
 
-# Workers Rate Limiting — built-in binding. Limits brute-force on the passcode
-# form. 10 req / 60s per IP. Per-Worker namespace.
+# Zone-level rate limit ruleset. Limits brute-force on the passcode form.
+# 10 POSTs / 60s / IP, 10-minute mitigation lockout. Zone-level rulesets MUST
+# carry zone_id and MUST NOT carry account_id (the provider rejects both).
 resource "cloudflare_ruleset" "preview_rate_limit" {
-  account_id  = var.cloudflare_account_id
+  zone_id     = data.cloudflare_zone.preview.id
   name        = "ai-website-agency-preview-ratelimit${local.env_suffix}"
   description = "Brute-force protection on POST /sites/<websiteId> passcode form"
   kind        = "zone"
   phase       = "http_ratelimit"
-  zone_id     = var.cloudflare_zone_id
 
   rules {
     action      = "block"
@@ -126,7 +131,7 @@ resource "cloudflare_ruleset" "preview_rate_limit" {
 # .github/workflows/cloudflare.yml) is named `ai-website-agency-preview${env_suffix}`.
 # Terraform claims the route binding so the host-pattern is in code.
 resource "cloudflare_workers_route" "preview" {
-  zone_id     = var.cloudflare_zone_id
+  zone_id     = data.cloudflare_zone.preview.id
   pattern     = local.is_production ? "${var.preview_subdomain}/*" : "${local.env_sanitized}.${var.preview_subdomain}/*"
   script_name = "ai-website-agency-preview${local.env_suffix}"
 }
