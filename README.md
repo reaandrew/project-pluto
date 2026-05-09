@@ -44,7 +44,7 @@ git push -u origin main
 
 - Replaces `ai-website-agency` → your project, `276447169330` → your account, `agency.techar.ch` → your domain, `reaandrew/ai-website-agency` → your org/repo, `personal_iphone` → your aws-vault profile, and rewrites the Go module path.
 - Substitutes across every `.tf`, `.go`, `.yml`, `.md`, `.ts`, `.tsx`, `.js`, `.json`, `.sh`, `go.mod`, `package.json`, `package-lock.json`, `.gitignore` file in the repo (excluding `.git`, `node_modules`, `.terraform`, `frontend/dist`, the placeholder bootstrap binary, and `bin/init.sh` itself).
-- Tested on a throwaway copy: 38/75 files substituted, **zero residual `ai-website-agency` / `levantar` / `276447169330` references** left in any source file.
+- Tested on a throwaway copy: 38/75 files substituted, **zero residual cloud-skeleton placeholder strings** left in any source file.
 - Re-initialises git history with a single `Initial commit from cloud-skeleton template` so each new project starts clean.
 - Validates inputs: 12-digit AWS account id, sane project regex (`^[a-z][a-z0-9-]{1,30}$`), all required flags present.
 - Prints the exact `gh repo create` + `gh secret set` + `aws-vault terraform apply` commands you should run next.
