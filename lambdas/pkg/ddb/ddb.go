@@ -3,7 +3,64 @@
 // PK("user", id) to build well-formed keys; this prevents stringly-typed bugs.
 package ddb
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"os"
+	"sync"
+
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+)
+
+// API is the subset of *dynamodb.Client that shared packages depend on. It is
+// deliberately minimal; widen it as later iterations need more operations
+// (pkg/cost, pkg/killswitch will add Get/Update). The concrete *dynamodb.Client
+// satisfies it structurally.
+type API interface {
+	PutItem(ctx context.Context, in *dynamodb.PutItemInput, opts ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+}
+
+var (
+	clientMu sync.RWMutex
+	client   API
+)
+
+// Client returns the package-level DynamoDB client, lazily constructed using
+// the default AWS credential chain on first call. Override with SetClient in
+// tests to inject a fake.
+func Client(ctx context.Context) (API, error) {
+	clientMu.RLock()
+	c := client
+	clientMu.RUnlock()
+	if c != nil {
+		return c, nil
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ddb: loading AWS config: %w", err)
+	}
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	if client == nil {
+		client = dynamodb.NewFromConfig(cfg)
+	}
+	return client, nil
+}
+
+// SetClient overrides the cached client. Pass nil to clear (forces the next
+// Client() call to rebuild from default config). Intended for tests.
+func SetClient(c API) {
+	clientMu.Lock()
+	client = c
+	clientMu.Unlock()
+}
+
+// TableName returns the items-table name from the ITEMS_TABLE env var, which
+// Terraform sets on every Lambda invocation environment.
+func TableName() string {
+	return os.Getenv("ITEMS_TABLE")
+}
 
 // PK constructs a DynamoDB partition key with a type prefix.
 //
