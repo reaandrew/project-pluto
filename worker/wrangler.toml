@@ -1,0 +1,39 @@
+# Wrangler config — deployed by .github/workflows/cloudflare.yml.
+#
+# CI deploys two-named-worker pattern: the script name carries the env_suffix so
+# both production and per-PR previews coexist in one Cloudflare account.
+#
+# Bindings (R2, KV, Rate Limit) are populated by Terraform via
+# `cloudflare_workers_script` data source matching on script name + env. The
+# Terraform stack creates the R2 bucket + KV namespace + Rate Limit ruleset;
+# wrangler binds them at deploy time using the IDs passed via env vars.
+
+name = "ai-website-agency-preview"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Per-env bindings injected by CI:
+#   wrangler deploy \
+#     --name "ai-website-agency-preview${ENV_SUFFIX}" \
+#     --var ENVIRONMENT:"$ENVIRONMENT" \
+#     --r2-bucket PREVIEWS=ai-website-agency-previews${ENV_SUFFIX} \
+#     --kv-namespace PREVIEW_PASSCODES_KV=$KV_NAMESPACE_ID
+#
+# `PASSCODE_SALT` secret is set out-of-band:
+#   wrangler secret put PASSCODE_SALT --name ai-website-agency-preview${ENV_SUFFIX}
+
+[observability]
+enabled = true
+
+# Local dev defaults (overridden by `wrangler dev --env`).
+[[r2_buckets]]
+binding = "PREVIEWS"
+bucket_name = "ai-website-agency-previews-local"
+
+[[kv_namespaces]]
+binding = "PREVIEW_PASSCODES_KV"
+id = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[vars]
+ENVIRONMENT = "local"
