@@ -156,8 +156,10 @@ func (c *Client) Fetch(ctx context.Context, urlStr string) (*Response, error) {
 	}
 
 	// Refresh the ETag cache on success or 304 (cache hit reuses body).
+	// Cache-write failures are deliberately ignored: the cache is a best-effort
+	// optimisation; failing to write must not break the caller's success path.
 	if !fromCache && statusCode >= 200 && statusCode < 300 {
-		c.etag.Put(ctx, urlStr, header, body)
+		_ = c.etag.Put(ctx, urlStr, header, body)
 	}
 
 	_ = ok // ok was only useful to feed cached above

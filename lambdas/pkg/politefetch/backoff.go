@@ -1,7 +1,8 @@
 package politefetch
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"encoding/binary"
 	"time"
 )
 
@@ -14,7 +15,9 @@ const (
 
 // backoffDuration returns the delay before the (attempt+1)-th attempt.
 // Decorrelated jitter — uniform random in [base, capped(2^attempt * base)].
-// rand is intentionally math/rand: jitter doesn't need crypto strength.
+// Uses crypto/rand to satisfy the project's "no math/rand" lint policy; if
+// the entropy source ever fails (effectively never on Linux Lambda), falls
+// back to a deterministic delay = base.
 func backoffDuration(attempt int) time.Duration {
 	if attempt < 0 {
 		attempt = 0
@@ -27,6 +30,25 @@ func backoffDuration(attempt int) time.Duration {
 		return upper
 	}
 	span := int64(upper - backoffBase)
-	jitter := time.Duration(rand.Int63n(span + 1)) // #nosec G404 — non-cryptographic jitter
-	return backoffBase + jitter
+	jitter, err := randInt63n(span + 1)
+	if err != nil {
+		return backoffBase
+	}
+	return backoffBase + time.Duration(jitter)
+}
+
+// randInt63n returns a uniform value in [0, n) using crypto/rand. Bias from
+// the modulo reduction is negligible for our jitter ranges (well under 2^32),
+// and we don't need cryptographic strength — but using crypto/rand keeps the
+// security scanner happy without a separate exclusion.
+func randInt63n(n int64) (int64, error) {
+	if n <= 0 {
+		return 0, nil
+	}
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0, err
+	}
+	v := int64(binary.LittleEndian.Uint64(b[:]) & 0x7fffffffffffffff)
+	return v % n, nil
 }
