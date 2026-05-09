@@ -6,8 +6,8 @@ export default function Queue() {
     <div>
       <h2>Review queue</h2>
       <p style={{ color: '#666' }}>
-        No items yet. Once the discover → audit → spec → generator → publisher
-        chain produces previews, they'll surface here for operator review.
+        No items yet. Once the discover → audit → spec → generator → publisher chain produces
+        previews, they'll surface here for operator review.
       </p>
     </div>
   );

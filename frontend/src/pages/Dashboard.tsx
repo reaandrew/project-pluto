@@ -38,8 +38,8 @@ export default function Dashboard() {
     <div>
       <h2>Dashboard</h2>
       <p style={{ color: '#666' }}>
-        Pipeline KPIs land here in a later iteration. For now this page just
-        proves the BFF round-trips.
+        Pipeline KPIs land here in a later iteration. For now this page just proves the BFF
+        round-trips.
       </p>
       <h3 style={{ marginTop: '1.5rem' }}>BFF /health</h3>
       <pre

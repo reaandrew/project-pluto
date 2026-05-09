@@ -8,9 +8,8 @@ export default function Settings() {
     <div>
       <h2>Pipeline settings</h2>
       <p style={{ color: '#666' }}>
-        Master kill switch, per-stage flags, cap sliders, and budget caps
-        will live here. Backed by <code>GET /settings</code> /
-        <code> PATCH /settings</code> (operator-only via Cognito group).
+        Master kill switch, per-stage flags, cap sliders, and budget caps will live here. Backed by{' '}
+        <code>GET /settings</code> /<code> PATCH /settings</code> (operator-only via Cognito group).
       </p>
     </div>
   );

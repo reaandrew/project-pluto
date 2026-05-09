@@ -8,8 +8,7 @@ export default function Login() {
     <div>
       <h2>Sign in</h2>
       <p style={{ color: '#666' }}>
-        The operator login flow redirects to the Cognito Hosted UI; the
-        wiring lands in iter 0.G.2.
+        The operator login flow redirects to the Cognito Hosted UI; the wiring lands in iter 0.G.2.
       </p>
     </div>
   );
