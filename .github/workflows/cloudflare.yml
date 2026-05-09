@@ -1,0 +1,174 @@
+name: Cloudflare
+
+# Deploys the passcode-gated preview Worker + applies the Cloudflare Terraform
+# stack (R2, Workers KV, Rate Limiting ruleset, Worker route).
+#
+# Triggers:
+#   - push to main          → deploy to production (env=production)
+#   - pull_request          → deploy to per-PR env named after the branch
+#   - workflow_dispatch     → manual deploy (env from input)
+#
+# Secrets required (must exist before merge):
+#   - CLOUDFLARE_API_TOKEN  (scopes: Workers Scripts:Edit, R2:Edit, Workers KV:Edit, Zone DNS:Edit)
+#   - CLOUDFLARE_ACCOUNT_ID
+#
+# NOT YET IMPLEMENTED (follow-up):
+#   - Destroy on PR close — destroy.yml currently only tears down the AWS
+#     terraform/ stack. Per-PR R2 buckets + KV namespaces accumulate until a
+#     manual cleanup or a future cloudflare-destroy.yml lands. Filed as a
+#     follow-up to iter 0.D.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/**'
+      - 'worker/**'
+      - '.github/workflows/cloudflare.yml'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'cloudflare/**'
+      - 'worker/**'
+      - '.github/workflows/cloudflare.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Env name (production for main; per-branch for previews)'
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: '1.9.8'
+  NODE_VERSION: '20'
+  AWS_REGION: 'eu-west-2'
+  TF_STATE_BUCKET: 'ai-website-agency-terraform-state-276447169330'
+
+permissions:
+  id-token: write       # for AWS OIDC (Terraform backend on S3)
+  contents: read
+  pull-requests: write  # for sticky comment
+
+jobs:
+  worker-quality:
+    name: Worker quality (typecheck + lint + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: worker/package-lock.json }
+      - run: npm ci
+        working-directory: worker
+      - run: npm run typecheck
+        working-directory: worker
+      - run: npm run lint
+        working-directory: worker
+      - run: npm run format:check
+        working-directory: worker
+      - run: npm run test:coverage
+        working-directory: worker
+      - uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: worker/coverage/lcov.info
+          flags: worker
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+  deploy:
+    name: Deploy Cloudflare stack + Worker
+    needs: worker-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
+    steps:
+      - uses: actions/checkout@v4
+      - run: source ./scripts/derive-env-name.sh
+      - run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-providers-cloudflare-${{ hashFiles('cloudflare/**/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-cloudflare-
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-ai-website-agency-cloudflare-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: '${{ env.TF_VERSION }}' }
+
+      - name: Terraform init
+        working-directory: cloudflare
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=terraform/cloudflare/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform validate
+        working-directory: cloudflare
+        run: terraform validate -no-color
+
+      - name: Terraform apply
+        working-directory: cloudflare
+        run: |
+          terraform apply -auto-approve -input=false \
+            -var="environment=${ENVIRONMENT}" \
+            -var="cloudflare_account_id=${CLOUDFLARE_ACCOUNT_ID}"
+
+      - name: Capture KV namespace ID + R2 bucket name
+        id: cf
+        working-directory: cloudflare
+        run: |
+          KV_ID=$(terraform output -raw kv_namespace_id)
+          R2_BUCKET=$(terraform output -raw r2_bucket_name)
+          echo "kv_id=${KV_ID}" >> "$GITHUB_OUTPUT"
+          echo "r2_bucket=${R2_BUCKET}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: 'npm', cache-dependency-path: worker/package-lock.json }
+      - run: npm ci
+        working-directory: worker
+
+      - name: Wrangler deploy
+        working-directory: worker
+        env:
+          ENV_SUFFIX: ${{ env.ENVIRONMENT == 'production' && '' || format('-{0}', env.ENVIRONMENT) }}
+          KV_NAMESPACE_ID: ${{ steps.cf.outputs.kv_id }}
+          R2_BUCKET_NAME: ${{ steps.cf.outputs.r2_bucket }}
+        run: |
+          npx wrangler deploy \
+            --name "ai-website-agency-preview${ENV_SUFFIX}" \
+            --var "ENVIRONMENT:${ENVIRONMENT}" \
+            --r2-bucket "PREVIEWS=${R2_BUCKET_NAME}" \
+            --kv-namespace "PREVIEW_PASSCODES_KV=${KV_NAMESPACE_ID}"
+
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cloudflare-deploy
+          message: |
+            ### Cloudflare deploy — `${{ env.ENVIRONMENT }}`
+
+            | Resource | Value |
+            |----------|-------|
+            | R2 bucket | `${{ steps.cf.outputs.r2_bucket }}` |
+            | KV namespace | `${{ steps.cf.outputs.kv_id }}` |
+            | Worker | `ai-website-agency-preview-${{ env.ENVIRONMENT }}` |
+
+            **Preview URL pattern:** `https://${{ env.ENVIRONMENT }}.previews.agency.techar.ch/sites/<websiteId>` (or `/healthz` for the readiness probe)
+
+            <sub>Run [#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>

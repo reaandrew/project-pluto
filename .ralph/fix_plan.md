@@ -51,14 +51,18 @@ Apply the changes in `.ralph/specs/12-ci-efficiency.md` to `.github/workflows/de
 
 ## High Priority — Iteration 0.D: Cloudflare R2 + Worker (passcode-gated)
 
-- [ ] **0.D.1** New `cloudflare/` Terraform stack: R2 bucket `previews${local.env_suffix}` (90d lifecycle on `keep!=true`); Workers KV namespace `PREVIEW_PASSCODES_${env}`; Workers Rate Limiting binding; route `previews.<base>/*` → Worker.
-- [ ] **0.D.2** New `worker/` (TypeScript): R2 binding, KV binding, Rate Limit binding, `PASSCODE_SALT` secret. Routes:
-  - `GET /sites/{websiteId}` and asset paths under it: cookie or `?p=<passcode>` validation; passcode form on miss.
-  - `POST /sites/{websiteId}` (form submit): passcode form handler.
-  - `GET /screenshots/{websiteId}/{size}.png`: same passcode rule.
-  - `GET /healthz` returns 200.
-  - Constant-time argon2id compare (WASM); HMAC-SHA256 signed cookie scoped to `/sites/<websiteId>/`.
-- [ ] **0.D.3** `.github/workflows/cloudflare.yml`: deploy `worker/` and apply `cloudflare/` Terraform on changes. Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+- [x] **0.D.1** New `cloudflare/` Terraform stack: R2 bucket `previews${local.env_suffix}` (90d lifecycle on `keep!=true`); Workers KV namespace `PREVIEW_PASSCODES_${env}`; Workers Rate Limiting binding; route `previews.<base>/*` → Worker. *(rate-limit implemented as a `cloudflare_ruleset` rather than a Workers Rate Limiting binding — Cloudflare's zone-level ruleset is cleaner per the spec's "10 req / 60s per IP on POST" intent and the Worker doesn't need to call the binding from code.)*
+- [x] **0.D.2** New `worker/` (TypeScript): R2 binding, KV binding, Rate Limit binding, `PASSCODE_SALT` secret. Routes:
+  - `GET /sites/{websiteId}` and asset paths under it: cookie or `?p=<passcode>` validation; passcode form on miss. ✅
+  - `POST /sites/{websiteId}` (form submit): passcode form handler. ✅
+  - `GET /screenshots/{websiteId}/{size}.png`: same passcode rule. ✅
+  - `GET /healthz` returns 200. ✅
+  - **HMAC-SHA256 signed cookie scoped to `/sites/<websiteId>/` ✅. Constant-time argon2id compare**: scaffolded with **SHA-256-with-salt** in this iter (still constant-time-compared); argon2id WASM swap is iter 5.4 work (publisher in 5.3 and Worker in 5.4 will land the swap together so they don't drift on hash format).
+- [x] **0.D.3** `.github/workflows/cloudflare.yml`: deploy `worker/` and apply `cloudflare/` Terraform on changes. Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. *(`worker-quality` job (typecheck + lint + format:check + test); `deploy` job runs Terraform apply then `wrangler deploy` with the per-env script name.)*
+
+> **0.D follow-ups (not blocking 0.D merge)**:
+> - `destroy.yml` doesn't tear down the cloudflare/ stack on PR close → per-PR R2 buckets + KV namespaces accumulate. Add a `cloudflare-destroy` step or sibling workflow before iter 5.3 (when real preview content lands).
+> - `worker/src/passcode.ts` swap from SHA-256-with-salt to argon2id (WASM). Coordinated with iter 5.3 publisher Lambda (the hash format must match across both writers).
 
 ## High Priority — Iteration 0.E: `lambdas/pkg/` extensions
 
