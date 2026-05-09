@@ -325,6 +325,14 @@ resource "aws_iam_role_policy" "cloudwatch_logs" {
 }
 
 # 7. DynamoDB — ai-website-agency-* tables only.
+#
+# Item-level actions (PutItem/GetItem/DeleteItem) are required so that
+# `aws_dynamodb_table_item` resources in `terraform/` can seed singleton
+# rows like the PipelineSettings record (iter 0.F.1). The Terraform
+# provider needs PutItem on create, GetItem to detect drift on plan, and
+# DeleteItem on destroy. These are scoped to the same `ai-website-agency-*`
+# table namespace as the management actions — pitfall #6 (one grouped
+# policy, not per-resource policies) preserved.
 resource "aws_iam_role_policy" "dynamodb" {
   name = "dynamodb"
   role = aws_iam_role.github_actions.id
@@ -345,6 +353,11 @@ resource "aws_iam_role_policy" "dynamodb" {
         "dynamodb:TagResource",
         "dynamodb:UntagResource",
         "dynamodb:ListTables",
+        # Item-level actions for `aws_dynamodb_table_item` resources
+        # (iter 0.F.1 PipelineSettings seed; future operator-managed rows).
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:DeleteItem",
       ]
       Resource = [
         "arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/ai-website-agency-*",
