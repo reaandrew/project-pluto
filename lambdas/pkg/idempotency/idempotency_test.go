@@ -35,6 +35,14 @@ func (f *fakeDDB) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...fun
 	return &dynamodb.PutItemOutput{}, nil
 }
 
+func (f *fakeDDB) GetItem(_ context.Context, _ *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	return &dynamodb.GetItemOutput{}, nil
+}
+
+func (f *fakeDDB) UpdateItem(_ context.Context, _ *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	return &dynamodb.UpdateItemOutput{}, nil
+}
+
 // withFakeClient sets up a fake DDB client and the ITEMS_TABLE env var for the
 // duration of the test. Returns the fake so tests can inspect call counts.
 func withFakeClient(t *testing.T) *fakeDDB {

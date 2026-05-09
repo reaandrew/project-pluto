@@ -13,6 +13,14 @@ func (stubAPI) PutItem(_ context.Context, _ *dynamodb.PutItemInput, _ ...func(*d
 	return &dynamodb.PutItemOutput{}, nil
 }
 
+func (stubAPI) GetItem(_ context.Context, _ *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	return &dynamodb.GetItemOutput{}, nil
+}
+
+func (stubAPI) UpdateItem(_ context.Context, _ *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	return &dynamodb.UpdateItemOutput{}, nil
+}
+
 func TestSetClientOverridesAndClientReturnsIt(t *testing.T) {
 	t.Cleanup(func() { SetClient(nil) })
 
