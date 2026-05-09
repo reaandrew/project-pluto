@@ -71,15 +71,10 @@ jobs:
         working-directory: worker
       - run: npm run format:check
         working-directory: worker
-      - run: npm run test:coverage
+      - run: npm test
         working-directory: worker
-      - uses: codecov/codecov-action@v5
-        if: always()
-        with:
-          files: worker/coverage/lcov.info
-          flags: worker
-          token: ${{ secrets.CODECOV_TOKEN }}
-        continue-on-error: true
+      # No codecov step here — @vitest/coverage-v8 doesn't run inside the
+      # workerd runtime that vitest-pool-workers uses (no node:inspector).
 
   deploy:
     name: Deploy Cloudflare stack + Worker
