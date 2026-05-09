@@ -83,35 +83,12 @@ resource "cloudflare_r2_bucket" "previews" {
   location   = "WEUR" # Western Europe
 }
 
-resource "cloudflare_r2_bucket_lifecycle" "previews" {
-  account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.previews.name
-
-  rule {
-    id      = "expire-without-keep-tag"
-    enabled = true
-
-    conditions {
-      prefix = "" # apply to all objects
-    }
-
-    delete_objects_transition {
-      condition {
-        type           = "Age"
-        max_age        = 7776000 # 90 days in seconds
-        date           = null
-        days_after_age = null
-      }
-    }
-
-    abort_multipart_uploads_transition {
-      condition {
-        type    = "Age"
-        max_age = 604800 # 7 days
-      }
-    }
-  }
-}
+# R2 lifecycle (90-day expiry on objects without `keep=true` metadata) is
+# managed via the Cloudflare API, NOT via Terraform — there's no first-class
+# `cloudflare_r2_bucket_lifecycle` resource in provider v4. Tracked as a
+# follow-up: a small one-shot `wrangler r2 lifecycle put` call from
+# .github/workflows/cloudflare.yml after `terraform apply`, or a Worker-side
+# scheduled cleanup job. Either way, not blocking iter 0.D substrate.
 
 # Workers KV — passcode hashes per websiteId. Key = "passcode:<websiteId>",
 # value = argon2id hash. The publisher (iter 5.3) writes; the Worker reads.
@@ -148,7 +125,7 @@ resource "cloudflare_ruleset" "preview_rate_limit" {
 # Worker script + route. The wrangler-deployed worker (deployed by
 # .github/workflows/cloudflare.yml) is named `ai-website-agency-preview${env_suffix}`.
 # Terraform claims the route binding so the host-pattern is in code.
-resource "cloudflare_worker_route" "preview" {
+resource "cloudflare_workers_route" "preview" {
   zone_id     = var.cloudflare_zone_id
   pattern     = local.is_production ? "${var.preview_subdomain}/*" : "${local.env_sanitized}.${var.preview_subdomain}/*"
   script_name = "ai-website-agency-preview${local.env_suffix}"
@@ -164,5 +141,5 @@ output "kv_namespace_id" {
 }
 
 output "worker_route_pattern" {
-  value = cloudflare_worker_route.preview.pattern
+  value = cloudflare_workers_route.preview.pattern
 }
