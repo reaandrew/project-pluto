@@ -198,3 +198,94 @@ export async function patchSettings(patch: Partial<PipelineSettings>): Promise<P
   }
   return (await res.json()) as PipelineSettings;
 }
+
+// ---------------------------------------------------------------------------
+// /targeting — TargetingProfile CRUD
+// ---------------------------------------------------------------------------
+// Shapes mirror lambdas/pkg/targeting/profile.go. Stats counters are
+// server-set; the form treats them as read-only.
+
+export interface TargetingWeights {
+  websiteAge: number;
+  auditScore: number;
+  businessSize: number;
+  contactConfidence: number;
+  verticalFit: number;
+}
+
+export interface TargetingStats {
+  discovered7d: number;
+  qualified7d: number;
+  approved7d: number;
+}
+
+export interface TargetingProfile {
+  id: string;
+  vertical: string;
+  location: string;
+  includeKeywords: string[];
+  excludeKeywords: string[];
+  weights: TargetingWeights;
+  enabled: boolean;
+  lastRunAt?: string;
+  stats: TargetingStats;
+  createdAt: string;
+  updatedAt: string;
+  etag: string;
+}
+
+export async function listTargetingProfiles(): Promise<TargetingProfile[]> {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/targeting`);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from GET ${cfg.bffBaseUrl}/targeting`);
+  }
+  const body = (await res.json()) as { profiles: TargetingProfile[] };
+  return body.profiles ?? [];
+}
+
+// createTargetingProfile sends a partial Profile (without id/etag/etc.).
+// The server fills those in and returns the canonical row.
+export async function createTargetingProfile(
+  draft: Omit<TargetingProfile, 'id' | 'createdAt' | 'updatedAt' | 'etag' | 'stats' | 'lastRunAt'>
+): Promise<TargetingProfile> {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/targeting`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(draft),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${cfg.bffBaseUrl}/targeting: ${text}`);
+  }
+  return (await res.json()) as TargetingProfile;
+}
+
+// updateTargetingProfile sends the whole edited profile back. The
+// `If-Match: <etag>` header is the optimistic-concurrency check — the
+// caller passes the etag they saw on the last read and the server
+// rejects with 412 if the row changed in between.
+export async function updateTargetingProfile(
+  id: string,
+  profile: TargetingProfile
+): Promise<TargetingProfile> {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/targeting/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'If-Match': profile.etag },
+    body: JSON.stringify(profile),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from PATCH ${cfg.bffBaseUrl}/targeting/${id}: ${text}`);
+  }
+  return (await res.json()) as TargetingProfile;
+}
+
+export async function deleteTargetingProfile(id: string): Promise<void> {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/targeting/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from DELETE ${cfg.bffBaseUrl}/targeting/${id}: ${text}`);
+  }
+}

@@ -47,6 +47,14 @@ func (f *fakeDDB) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ 
 	return &dynamodb.UpdateItemOutput{}, nil
 }
 
+func (f *fakeDDB) Scan(_ context.Context, _ *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+	return &dynamodb.ScanOutput{}, nil
+}
+
+func (f *fakeDDB) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	return &dynamodb.DeleteItemOutput{}, nil
+}
+
 func setup(t *testing.T) *fakeDDB {
 	t.Helper()
 	t.Setenv("ITEMS_TABLE", "items-test")
