@@ -1,6 +1,6 @@
 # Claude Code instructions — website-agency
 
-This is an AI-assisted outbound website-redesign pipeline. The implementation repo is **created from the GitHub template `reaandrew/cloud-skeleton`** and customized via `bin/init.sh`. This spec repo (`reaandrew/ai-website-agency-spec`) is the canonical source for the spec; copy `.ralph/` and `CLAUDE.md` into the implementation repo (`reaandrew/ai-website-agency`) on initialization.
+This is an AI-assisted outbound website-redesign pipeline. The implementation repo is **created from the GitHub template `reaandrew/cloud-skeleton`** and customized via `bin/init.sh`. The spec repo (`reaandrew/ai-website-agency-spec`) is the canonical source for the spec; copy `.ralph/` and `CLAUDE.md` into the implementation repo (`reaandrew/project-pluto`) on initialization. (AWS resource names, Go module path, and SSM parameter paths still carry the original `ai-website-agency` identifier — renaming them in place is destructive; treat that prefix as an internal handle.)
 
 Architecture, data, events, prompts, UI, iteration plan, and quality rules live under `.ralph/specs/`. Claude-based agents/commands/hooks live under `.claude/`.
 

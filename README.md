@@ -1,4 +1,4 @@
-# ai-website-agency
+# project-pluto
 
 An AI-assisted outbound pipeline for redesigning small-business websites. It
 continuously finds businesses with weak sites, audits them, generates a private
