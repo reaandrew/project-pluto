@@ -1,94 +1,128 @@
-# cloud-skeleton
+# project-pluto
 
-A production-grade AWS cloud-native skeleton **GitHub template** for new projects.
+An AI-assisted outbound pipeline for redesigning small-business websites. It
+continuously finds businesses with weak sites, audits them, generates a private
+redesign preview for the qualified ones, and surfaces the top candidates per
+day in a human review queue. The operator approves, edits, or rejects; on
+approval, an outreach email with the preview link is drafted and sent via SES.
 
-Click **"Use this template"** at the top of this repo on GitHub, give your new repo a name, then run `bin/init.sh` and you have:
+Operator decisions on lead criteria, site design, and email copy flow back
+into targeting, generation, and tone tuners so the pipeline measurably
+improves with use.
 
-- Vite/React/TypeScript frontend
-- Go Lambda on `provided.al2023`
-- API Gateway v2 (HTTP API) with custom domain
-- DynamoDB (PAY_PER_REQUEST, PITR + deletion-protection in prod only)
-- BFF CloudFront with cookie → Authorization-header transform
-- A **fully isolated cloud preview environment for every PR**, automatically destroyed on PR close
-- A GitHub Actions pipeline gating every PR through lint + types + unit + secret-scan + SAST (Semgrep) + SCA + IaC (Checkov + tfsec) + Trivy + smoke + E2E (Playwright) + DAST (ZAP) + a11y (Lighthouse) + perf (k6) — all green, no advisory cope
+This is the **implementation repo**. The canonical specification lives at
+[`reaandrew/ai-website-agency-spec`](https://github.com/reaandrew/ai-website-agency-spec).
 
-## Use this template
+## Status
 
-```bash
-# 1. On GitHub: click "Use this template" → "Create a new repository"
-# 2. Clone your new repo
-git clone https://github.com/YOUR-ORG/YOUR-REPO.git
-cd YOUR-REPO
+Under construction. Tracked in [`.ralph/fix_plan.md`](.ralph/fix_plan.md):
 
-# 3. Customise — replaces every "ai-website-agency" / account / domain / org reference
-bin/init.sh \
-  --project        myapp \
-  --account-id     123456789012 \
-  --base-domain    myapp.example.com \
-  --parent-domain  example.com \
-  --github-org     YOUR-ORG \
-  --github-repo    YOUR-REPO \
-  --aws-vault-profile my-aws-profile
+- Iteration 0.A → 0.F shipped — bootstrap, CI rewrite, agency-specific Terraform
+  (EventBridge, Cognito, SES, Bedrock IAM, DynamoDB GSIs, KMS), the Cloudflare
+  R2 + Worker preview-hosting layer, the kill-switch + cost-cap controls, and
+  the cost-rollover scheduled Lambda.
+- Iteration 0.G in flight — admin shell routing.
+- Iterations 1–11 — Targeting Profile, Discovery, Audit, Qualification,
+  Spec Generator, Preview Generator, Review Queue, Email, Feedback Tuners,
+  Production Hardening.
 
-# 4. Push (init.sh re-initialises git history with a single commit)
-git remote add origin https://github.com/YOUR-ORG/YOUR-REPO.git
-git push -u origin main
+Each iteration ends with a working demo. No half-built infra survives between
+iterations.
 
-# 5. Run the one-time AWS bootstrap (creates state bucket, hosted zone,
-#    ACM certs, 4× CloudFront, OIDC role, etc.) — see docs/BOOTSTRAP.md
+## What's in here
+
+```
+.ralph/specs/   — architecture, data model, events, prompts, iteration plan, quality rules
+.ralph/         — Claude-Code operating instructions, fix plan, agent + command definitions
+.claude/        — review subagents, slash commands, hooks
+aws-setup/      — one-time bootstrap stack (Route53 zone, ACM certs, CloudFronts, OIDC role)
+terraform/      — per-env stack applied by CI (Lambdas, API GW, DynamoDB, Cognito, SES, EventBridge, KMS)
+cloudflare/     — Terraform for the R2 + Worker passcode-gated preview hosting
+worker/         — Cloudflare Worker source
+lambdas/        — Go Lambda services + shared pkg/ libraries (events, cost, idempotency, killswitch, …)
+frontend/       — Vite + React + TypeScript admin shell
+e2e-tests/      — Playwright suite (runs on the runner, no Docker)
+docs/           — ARCHITECTURE.md, BOOTSTRAP.md
+scripts/        — derive-env-name, wait-for-endpoint, deploy-frontend, cleanup-environment
+.github/        — Actions workflows (deploy, destroy, e2e-tests, security)
 ```
 
-`bin/init.sh --dry-run ...` shows you what it would change without touching anything.
+## Architecture at a glance
 
-### What `init.sh` does (verified end-to-end)
+| Layer | Tech |
+|---|---|
+| Discovery + Audit + Qualify + Generate consumers | Go 1.24 on AWS Lambda (`provided.al2023`), SQS-driven, idempotent |
+| LLM | Amazon Bedrock — Haiku 4.5 for short copy + triage, Sonnet 4.6 for spec + headlines |
+| Data | DynamoDB (single table, `pk`+`sk`, GSI1/2/3), PAY_PER_REQUEST, PITR in prod |
+| Events | EventBridge custom bus + archive; consumers retry via per-Lambda DLQs |
+| Schedule | EventBridge Scheduler (hourly discovery, daily cost-rollover, weekly tuners) |
+| Admin API | API Gateway v2 HTTP API + JWT authorizer (Cognito Hosted UI, operator group) |
+| Admin UI | React SPA on CloudFront + S3 (production + per-PR preview envs) |
+| Generated previews | Cloudflare R2 + a single Worker with KV + Rate Limiting (passcode-gated) |
+| Email | SES with configuration set, suppression list, bounce/complaint feedback |
+| Secrets at rest | KMS CMK for passcode-cleartext envelope encryption (`publisher` writes, `email-draft` decrypts, wiped 24h post-send) |
 
-- Replaces `ai-website-agency` → your project, `276447169330` → your account, `agency.techar.ch` → your domain, `reaandrew/ai-website-agency` → your org/repo, `personal_iphone` → your aws-vault profile, and rewrites the Go module path.
-- Substitutes across every `.tf`, `.go`, `.yml`, `.md`, `.ts`, `.tsx`, `.js`, `.json`, `.sh`, `go.mod`, `package.json`, `package-lock.json`, `.gitignore` file in the repo (excluding `.git`, `node_modules`, `.terraform`, `frontend/dist`, the placeholder bootstrap binary, and `bin/init.sh` itself).
-- Tested on a throwaway copy: 38/75 files substituted, **zero residual `ai-website-agency` / `levantar` / `276447169330` references** left in any source file.
-- Re-initialises git history with a single `Initial commit from cloud-skeleton template` so each new project starts clean.
-- Validates inputs: 12-digit AWS account id, sane project regex (`^[a-z][a-z0-9-]{1,30}$`), all required flags present.
-- Prints the exact `gh repo create` + `gh secret set` + `aws-vault terraform apply` commands you should run next.
+Full topology + the data model + the event flow + the iteration plan all live
+under [`.ralph/specs/`](.ralph/specs/). The
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) file has the diagram and the
+running list of skeleton-pitfalls the substrate mitigates.
 
-After running `init.sh`, you can delete `bin/init.sh` — it has done its job.
+## Operating principles
 
-### Required GitHub secrets (after first AWS bootstrap)
+1. **Capacity-aware by default.** Discovery is cheap and runs broadly; preview
+   generation and outreach are expensive and run narrowly. Operator attention
+   is the most expensive resource — protect it with caps.
+2. **Composition over freestyle.** Bedrock outputs structured JSON; code
+   renders known-safe components. No invented testimonials, awards, staff,
+   prices, certifications, or affiliations. See
+   [`.ralph/specs/10-quality-rules.md`](.ralph/specs/10-quality-rules.md).
+3. **Cost-aware AI.** Haiku for triage; Sonnet only for spec + headlines.
+   Always cache, always cap.
+4. **Idempotent everywhere.** Every event handler is replay-safe. Every paid
+   API call has a cache. Every consumer has a DLQ.
+5. **Feedback is product.** If a stage generates an artifact, the operator's
+   override on that artifact is captured in the same iteration. The weekly
+   tuners turn those captures into adjustments to targeting / style guides /
+   email tone.
 
-```bash
-gh secret set AWS_ROLE_ARN  --body "arn:aws:iam::<ACCOUNT_ID>:role/github-actions-<PROJECT>"
-gh secret set E2E_TEST_USER --body "e2e-tester"
-gh secret set E2E_TEST_PASS --body "$(openssl rand -base64 24)"
-```
-
-`AWS_ROLE_ARN` value comes from `terraform output -raw github_actions_role_arn` after the first `aws-setup/` apply. `init.sh` prints the exact command line you need.
-
-## Per-environment URL contract
+## URL contract per environment
 
 | | Production (`main`) | Preview (PR branch `feat-x`) |
 |---|---|---|
-| Frontend | `https://YOUR-DOMAIN/` | `https://preview.YOUR-DOMAIN/feat-x/` |
-| BFF | `https://bff.YOUR-DOMAIN/` | `https://feat-x.bff.YOUR-DOMAIN/` |
-| API | `https://api.YOUR-DOMAIN/` | `https://api-feat-x.YOUR-DOMAIN/` |
+| Frontend | `https://agency.techar.ch/` | `https://preview.agency.techar.ch/feat-x/` |
+| BFF | `https://bff.agency.techar.ch/` | `https://feat-x.bff.agency.techar.ch/` |
+| API | `https://api.agency.techar.ch/` | `https://api-feat-x.agency.techar.ch/` |
 
-Per-branch envs are spawned automatically on PR open and destroyed on PR close. The two preview-side CloudFront distributions and the wildcard ACM cert are **shared singletons** in `aws-setup/` — never per-branch (the 15-min provision/destroy time killed the previous attempts at this).
+Per-PR envs spawn on open and tear down on close. The two preview-side
+CloudFront distributions and the wildcard ACM cert are shared singletons in
+`aws-setup/`.
 
-## Repo layout
+## Substrate
 
+The repo started from the `reaandrew/cloud-skeleton` template — a production-
+grade AWS substrate with a known-pitfall mitigation table, per-PR ephemeral
+envs, OIDC-only CI deploys, and the gated Actions pipeline (lint + types +
+unit + secret-scan + SAST + SCA + IaC scan + smoke + E2E + DAST + a11y +
+load). The pipeline and the agency-specific Lambdas + Terraform on top of
+that substrate are this repo's contribution.
+
+## Build / test locally
+
+```bash
+# Go Lambdas
+cd lambdas && go test ./... && golangci-lint run --timeout=5m ./...
+
+# Frontend
+cd frontend && npm ci && npm run typecheck && npm run lint && npm run test && npm run build
+
+# Terraform (validation only; apply happens via CI / aws-vault)
+cd terraform && terraform fmt -check -recursive && terraform validate
 ```
-aws-setup/    — one-time bootstrap (zone, certs, CloudFronts, OIDC, IAM role)
-terraform/    — per-env stack applied by CI (Lambda, API GW, DynamoDB, S3)
-lambdas/      — Go Lambda source + shared pkg/
-frontend/     — Vite React TS app
-scripts/      — derive-env-name, wait-for-endpoint, deploy-frontend, cleanup-environment
-e2e-tests/    — Playwright (runs directly on the runner, no Docker)
-.github/      — GitHub Actions workflows (deploy.yml, destroy.yml, e2e-tests.yml, security.yml, ...)
-docs/         — BOOTSTRAP.md (one-time setup runbook), ARCHITECTURE.md
-bin/init.sh   — template customiser; delete after running
-```
 
-## Pitfall hall-of-fame (avoided here)
+See [`docs/BOOTSTRAP.md`](docs/BOOTSTRAP.md) for the one-time AWS bootstrap if
+you want to actually deploy this rather than read it.
 
-20 known footguns from prior attempts (S3 force_destroy IAM gaps, missing dummy bootstrap binaries at plan time, IAM 10KB inline policy limit, hardcoded domains, SSM overwrite races, stale tfstate after destroy, Docker pull flakiness, asset-path breakage under preview prefixes, per-branch CloudFront blow-up time, etc.) are mitigated up front. See `docs/ARCHITECTURE.md` for the full table.
+## License
 
-## Provenance
-
-Hardened by repeated production use (this is bootstrap attempt #6 across the techar.ch org). The reference implementation lives at `reaandrew/ai-website-agency`.
+No license declared yet. Treat the code as source-available reference material
+until a `LICENSE` file lands.

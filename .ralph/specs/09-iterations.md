@@ -76,7 +76,7 @@ Before adding any agency-specific resources, tune the skeleton's pipeline so sub
 - [ ] **0.G.4 Access strip skeleton** — Bring across the access-strip component (used in iter 5+) — empty state for now.
 
 **Acceptance**:
-- [ ] `bin/init.sh` ran cleanly; no residual `finance` / `levantar` / `134570442530` strings remain anywhere outside `bin/init.sh` itself.
+- [ ] `bin/init.sh` ran cleanly; no residual template-placeholder strings remain anywhere outside `bin/init.sh` itself.
 - [ ] Production env URLs all return: `<base>/`, `bff.<base>/health`, `api.<base>/health`.
 - [ ] A no-op PR provisions a preview env and the cleanup destroys it on close (one full cycle observed).
 - [ ] `aws ssm get-parameters-by-path --path /<project> --recursive` lists all expected entries from BOOTSTRAP.md plus the new `cognito/`, `eventbridge/`, `cloudflare/` keys.

@@ -6,7 +6,7 @@
                           User
               ┌─────────────┼─────────────┐
               ▼             ▼             ▼
-       ai-website-agency.lev…   bff.ai-website-agency.lev…  preview.ai-website-agency.lev…/<env>/
+         agency.techar.ch    bff.agency.techar.ch   preview.agency.techar.ch/<env>/
               │             │                       │
               ▼             ▼                       ▼
        ┌────────────┐ ┌──────────────┐    ┌────────────────────┐
@@ -20,7 +20,7 @@
        │ S3 prod-fe │ │   api-<env>) │              ▼
        └────────────┘ └──────┬───────┘    ┌────────────────────┐
                              │             │ S3 preview-shared │
-                  api[.|-<env>].ai-website-agency…  │ /<env>/...        │
+              api[.|-<env>].agency.techar.ch     │ /<env>/...        │
                              ▼             └────────────────────┘
                     ┌──────────────────┐
                     │ API Gateway v2   │   <── per-env custom domain
