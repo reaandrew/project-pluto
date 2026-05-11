@@ -41,6 +41,9 @@ export default function App() {
         <NavLink to="/queue" style={navStyle}>
           Queue
         </NavLink>
+        <NavLink to="/metrics" style={navStyle}>
+          Metrics
+        </NavLink>
         <NavLink to="/settings" style={navStyle}>
           Settings
         </NavLink>
