@@ -61,4 +61,81 @@ export async function getHealth(): Promise<HealthResponse> {
   }
   return (await res.json()) as HealthResponse;
 }
-// Demo change for the skeleton-test PR
+
+// ---------------------------------------------------------------------------
+// /settings — PipelineSettings read/write surface
+// ---------------------------------------------------------------------------
+// Shapes mirror lambdas/pkg/killswitch/settings.go. Any field added on the
+// Go side has to land here too or the form will silently round-trip stale
+// data. The api-settings Lambda (iter 0.F.2) deep-merges PATCH bodies, so
+// sending the whole object back is safe — sending a subset only updates the
+// listed fields.
+
+export interface StageFlags {
+  discoveryEnabled: boolean;
+  auditEnabled: boolean;
+  previewEnabled: boolean;
+  outreachEnabled: boolean;
+}
+
+export interface Caps {
+  maxDiscoveriesPerDay: number;
+  maxAuditsPerDay: number;
+  maxPreviewsPerDay: number;
+  maxEmailsPerDay: number;
+  maxReviewQueueSize: number;
+  maxBacklogSize: number;
+}
+
+export interface Thresholds {
+  minTechnicalIssueScore: number;
+  minQualificationScore: number;
+  minContactConfidence: number;
+}
+
+export interface Budgets {
+  dailyBedrockUsd: number;
+  dailyPlacesUsd: number;
+  dailyEmailUsd: number;
+}
+
+export interface StagePauseReasons {
+  discovery?: string;
+  audit?: string;
+  preview?: string;
+  outreach?: string;
+}
+
+export interface PipelineSettings {
+  pipelineEnabled: boolean;
+  stages: StageFlags;
+  caps: Caps;
+  thresholds: Thresholds;
+  budgets: Budgets;
+  stagePauseReasons?: StagePauseReasons;
+}
+
+export async function getSettings(): Promise<PipelineSettings> {
+  const res = await fetch(`${cfg.bffBaseUrl}/settings`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${cfg.bffBaseUrl}/settings`);
+  }
+  return (await res.json()) as PipelineSettings;
+}
+
+export async function patchSettings(patch: Partial<PipelineSettings>): Promise<PipelineSettings> {
+  const res = await fetch(`${cfg.bffBaseUrl}/settings`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from PATCH ${cfg.bffBaseUrl}/settings: ${text}`);
+  }
+  return (await res.json()) as PipelineSettings;
+}
