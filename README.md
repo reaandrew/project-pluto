@@ -10,9 +10,6 @@ Operator decisions on lead criteria, site design, and email copy flow back
 into targeting, generation, and tone tuners so the pipeline measurably
 improves with use.
 
-This is the **implementation repo**. The canonical specification lives at
-[`reaandrew/ai-website-agency-spec`](https://github.com/reaandrew/ai-website-agency-spec).
-
 ## Status
 
 Under construction. Tracked in [`.ralph/fix_plan.md`](.ralph/fix_plan.md):
