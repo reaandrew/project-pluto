@@ -73,8 +73,8 @@ variable "github_org" {
 
 variable "github_repo" {
   type        = string
-  default     = "ai-website-agency"
-  description = "GitHub repo name — constrains the OIDC trust policy to repo:<org>/<repo>:*"
+  default     = "project-pluto"
+  description = "GitHub repo name — constrains the OIDC trust policy to repo:<org>/<repo>:*. Renamed from ai-website-agency to project-pluto on 2026-05-11; trust policy must reapply for CI's OIDC AssumeRole to succeed."
 }
 
 # ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ data "aws_iam_openid_connect_provider" "github" {
 # ---------------------------------------------------------------------------
 # GitHub Actions IAM role
 # ---------------------------------------------------------------------------
-# Trust policy is constrained to repo:reaandrew/ai-website-agency:* — never broader.
+# Trust policy is constrained to repo:reaandrew/project-pluto:* — never broader.
 # This excludes pushes to forks (which would otherwise inherit the role).
 
 resource "aws_iam_role" "github_actions" {
