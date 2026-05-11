@@ -78,7 +78,7 @@ resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
 resource "aws_scheduler_schedule" "discover_hourly" {
   name       = "discover-hourly"
   group_name = aws_scheduler_schedule_group.pipeline.name
-  state      = "DISABLED" # iter 1.3 enables
+  state      = "ENABLED" # enabled in iter 1.3 now that the discover Lambda exists
 
   schedule_expression          = "rate(1 hour)"
   schedule_expression_timezone = "UTC"
@@ -88,8 +88,7 @@ resource "aws_scheduler_schedule" "discover_hourly" {
   }
 
   target {
-    # Placeholder ARN — replaced by the real discover Lambda ARN in iter 1.3.
-    arn      = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:ai-website-agency-discover${local.env_suffix}"
+    arn      = aws_lambda_function.discover.arn
     role_arn = aws_iam_role.scheduler_invoke.arn
 
     retry_policy {

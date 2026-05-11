@@ -51,6 +51,10 @@ func (f *fakeDDB) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ .
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (f *fakeDDB) Query(_ context.Context, _ *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
+
 // withFakeClient sets up a fake DDB client and the ITEMS_TABLE env var for the
 // duration of the test. Returns the fake so tests can inspect call counts.
 func withFakeClient(t *testing.T) *fakeDDB {

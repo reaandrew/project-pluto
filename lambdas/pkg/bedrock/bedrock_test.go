@@ -84,6 +84,10 @@ func (f *fakeDDB) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ .
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (f *fakeDDB) Query(_ context.Context, _ *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
+
 func setup(t *testing.T) (*fakeBedrock, *fakeDDB) {
 	t.Helper()
 	t.Setenv("ITEMS_TABLE", "items-test")

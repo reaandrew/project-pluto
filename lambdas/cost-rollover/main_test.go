@@ -154,6 +154,10 @@ func (f *fakeDDB) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ .
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (f *fakeDDB) Query(_ context.Context, _ *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
+
 func itemFor(t *testing.T, s killswitch.Settings) *dynamodb.GetItemOutput {
 	t.Helper()
 	item, err := attributevalue.MarshalMap(s)
