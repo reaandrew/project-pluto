@@ -1,65 +1,46 @@
-import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { COGNITO_LOGIN_URL } from './api';
 
-// AuthGuard wraps the routes that require an operator session. On mount
-// it checks the document.cookie jar for the `auth_token` cookie that
-// the BFF chain's cookie-to-auth CloudFront Function reads on every
-// request. Absent cookie → redirect to the Cognito Hosted UI; present
-// cookie → render the protected route's <Outlet/>.
+// AuthGuard wraps the routes that require an operator session. On
+// render it checks the document.cookie jar for the `auth_token`
+// cookie that the BFF chain's cookie-to-auth CloudFront Function
+// reads on every request. Absent cookie → render <Navigate to=
+// "/login" replace />, which lets Login.tsx do the PKCE prep before
+// bouncing to Cognito. Present cookie → render the protected
+// route's <Outlet/>.
 //
-// The cookie itself is HttpOnly when set by the post-OAuth callback
-// handler, so this check works against the BROWSER's cookie-presence,
-// not the cookie's value. That's enough to gate routing without
-// exposing the JWT to JavaScript.
+// The cookie is set non-HttpOnly by Callback.tsx (post-OAuth code
+// exchange) so document.cookie can see it. JWT validity is the
+// BFF's job on each authenticated call; AuthGuard's check is
+// presence-only.
 //
-// COGNITO_LOGIN_URL empty disables the redirect — used in local `npm
-// run dev` and in unit tests, where bouncing to Cognito would either
-// fail (CORS / unreachable) or take the test off-page.
-//
-// Returning <Outlet/> immediately for the cookie-present path is
-// deliberate: any further auth state (user identity, group membership)
-// is the BFF's responsibility on each authenticated call.
+// COGNITO_LOGIN_URL empty disables the redirect — used in local
+// `npm run dev`, where bouncing through /login → Cognito would
+// fail (CORS / unreachable).
 export default function AuthGuard() {
   const cookie = hasAuthCookie();
 
-  useEffect(() => {
-    if (cookie) return;
-    if (!COGNITO_LOGIN_URL) return;
-    // window.location.replace (not assign) so the unauthenticated URL
-    // isn't kept in browser history; the back button after login goes
-    // to wherever the user was before the redirect.
-    window.location.replace(COGNITO_LOGIN_URL);
-  }, [cookie]);
-
   if (!cookie) {
-    // While the redirect is in flight, render a minimal placeholder
-    // rather than the protected content. With COGNITO_LOGIN_URL empty
-    // this is the permanent state (local dev) — the message tells the
-    // operator what's happening.
-    return (
-      <p style={{ color: '#666' }}>
-        {COGNITO_LOGIN_URL
-          ? 'Redirecting to sign-in…'
-          : 'Not signed in. Configure cognitoHostedLoginUrl in runtime-config.js to enable the redirect.'}
-      </p>
-    );
+    if (!COGNITO_LOGIN_URL) {
+      return (
+        <p style={{ color: '#666' }}>
+          Not signed in. Configure cognitoHostedLoginUrl in runtime-config.js to enable the
+          redirect.
+        </p>
+      );
+    }
+    // Internal navigation to /login so Login.tsx's PKCE prep runs
+    // before the external Cognito redirect. `replace` keeps the
+    // protected URL out of history.
+    return <Navigate to="/login" replace />;
   }
-
   return <Outlet />;
 }
 
 // hasAuthCookie reads document.cookie and returns whether an entry
-// named `auth_token` is present (any value, including empty string).
-// document.cookie returns a semicolon-delimited string of `name=value`
-// pairs for every non-HttpOnly cookie AND every HttpOnly cookie scoped
-// to this origin's path — wait, that's wrong: HttpOnly cookies are NOT
-// readable from document.cookie. This check therefore only succeeds
-// when `auth_token` was set without the HttpOnly flag. The callback
-// handler that finalises the OAuth code-exchange (separate iter) will
-// set a tandem non-HttpOnly `auth_token_present=1` flag if it ever
-// needs to mark HttpOnly auth; for now the cookie is non-HttpOnly so
-// this check is sufficient.
+// named `auth_token` is present. document.cookie skips HttpOnly
+// cookies — fine here because Callback.tsx sets the cookie from
+// JS, so it's non-HttpOnly by construction.
 function hasAuthCookie(): boolean {
   if (typeof document === 'undefined') return false;
   const pairs = document.cookie.split(';');

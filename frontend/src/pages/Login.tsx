@@ -1,17 +1,37 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { COGNITO_LOGIN_URL } from '../api';
+import { beginPkceFlow } from '../auth';
 
-// /login is the explicit "Sign in" destination. On mount it bounces to
-// the Cognito Hosted UI. The AuthGuard does the same thing implicitly
-// for any protected route, so most callers never see this page —
-// /login is the destination of an explicit click on the "Sign in" nav
-// link, or the fallback when COGNITO_LOGIN_URL isn't configured.
+// /login is the explicit "Sign in" destination. AuthGuard navigates
+// here when an unauthenticated caller hits a protected route. On
+// mount we generate the PKCE verifier + challenge, stash the
+// verifier in sessionStorage, and bounce to the Cognito Hosted UI
+// with the challenge appended.
+//
+// If COGNITO_LOGIN_URL is empty (local dev before the substrate is
+// reachable) the page shows a static message instead of looping.
 export default function Login() {
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   useEffect(() => {
-    if (COGNITO_LOGIN_URL) {
-      window.location.replace(COGNITO_LOGIN_URL);
-    }
+    if (!COGNITO_LOGIN_URL) return;
+    beginPkceFlow(COGNITO_LOGIN_URL)
+      .then((url) => {
+        window.location.replace(url);
+      })
+      .catch((err: Error) => {
+        setErrorMsg(err.message);
+      });
   }, []);
+
+  if (errorMsg) {
+    return (
+      <div>
+        <h2>Sign-in failed</h2>
+        <p style={{ color: '#b00' }}>{errorMsg}</p>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import App from './App';
 import AuthGuard from './AuthGuard';
 import { BASENAME } from './api';
+import Callback from './pages/Callback';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Queue from './pages/Queue';
@@ -17,10 +18,12 @@ createRoot(root).render(
     <BrowserRouter basename={BASENAME}>
       <Routes>
         <Route path="/" element={<App />}>
-          {/* /login is public — needs to be reachable when unauthenticated. */}
+          {/* Public routes — reachable when unauthenticated. */}
           <Route path="login" element={<Login />} />
-          {/* All other routes pass through AuthGuard, which bounces
-              unauthenticated callers to the Cognito Hosted UI. */}
+          <Route path="oauth/callback" element={<Callback />} />
+          {/* All other routes pass through AuthGuard, which sends
+              unauthenticated callers to /login (which then bounces
+              to the Cognito Hosted UI after PKCE prep). */}
           <Route element={<AuthGuard />}>
             <Route index element={<Dashboard />} />
             <Route path="queue" element={<Queue />} />

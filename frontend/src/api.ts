@@ -16,6 +16,17 @@ export interface RuntimeConfig {
   // and disables the guard (useful for local `npm run dev` before the
   // operator stack is up).
   cognitoHostedLoginUrl?: string;
+  // Cognito Hosted UI domain (e.g. `xyz-auth.auth.eu-west-2.amazoncognito.com`)
+  // without any path — used to derive the /oauth2/token endpoint for the
+  // PKCE code-exchange in Callback.tsx.
+  cognitoAuthOrigin?: string;
+  // Cognito app-client ID — needed in the form-encoded body of the
+  // token-exchange request.
+  cognitoClientId?: string;
+  // Redirect URI sent in the original auth request — must be echoed back
+  // exactly in the token exchange or Cognito rejects with
+  // `invalid_grant`.
+  cognitoRedirectUri?: string;
 }
 
 declare global {
@@ -31,6 +42,9 @@ const cfg: RuntimeConfig = window.__FINANCE_CONFIG__ ?? {
   gitSha: 'unknown',
   basename: '/',
   cognitoHostedLoginUrl: '',
+  cognitoAuthOrigin: '',
+  cognitoClientId: '',
+  cognitoRedirectUri: '',
 };
 
 export const ENV = cfg.environment;
@@ -42,6 +56,22 @@ export const BASENAME = cfg.basename ?? '/';
 // Empty string disables the AuthGuard redirect; useful for local dev
 // before the Cognito stack is reachable.
 export const COGNITO_LOGIN_URL = cfg.cognitoHostedLoginUrl ?? '';
+
+// The Callback-side fields are exposed as getters (rather than
+// const captures at module-load) so the unit tests can reset
+// window.__FINANCE_CONFIG__ in beforeEach and have the next call
+// see the fresh values. Production callers don't care — the
+// runtime-config.js loads before the bundle, so by the time these
+// getters fire the window value is already set.
+export function getCognitoAuthOrigin(): string {
+  return window.__FINANCE_CONFIG__?.cognitoAuthOrigin ?? '';
+}
+export function getCognitoClientId(): string {
+  return window.__FINANCE_CONFIG__?.cognitoClientId ?? '';
+}
+export function getCognitoRedirectUri(): string {
+  return window.__FINANCE_CONFIG__?.cognitoRedirectUri ?? '';
+}
 
 // signOutAndRedirect handles the "stale auth_token cookie" case: the
 // cookie is present (so AuthGuard let the user in) but the BFF's JWT
