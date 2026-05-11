@@ -29,7 +29,24 @@ test.describe('health', () => {
     }
   });
 
-  test('frontend loads and shows env badge', async ({ page }) => {
+  test('frontend loads and shows env badge', async ({ page, context }) => {
+    // Iter 0.G.2: the AuthGuard wrapping the Dashboard route reads the
+    // `auth_token` cookie via document.cookie. Without it, the page
+    // bounces to the Cognito Hosted UI and the test fails. Setting a
+    // stub value satisfies the presence check — /health itself is a
+    // public route on the BFF/API chain so JWT validity isn't checked.
+    const url = new URL(BASE_URL);
+    await context.addCookies([
+      {
+        name: 'auth_token',
+        value: 'e2e-stub',
+        domain: url.hostname,
+        path: '/',
+        httpOnly: false,
+        secure: url.protocol === 'https:',
+      },
+    ]);
+
     await page.goto(BASE_URL);
     await expect(page.locator('h1')).toHaveText('ai-website-agency');
     if (ENVIRONMENT !== 'unknown') {
