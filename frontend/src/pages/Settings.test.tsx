@@ -1,7 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import Settings, { computeDailyCostUsd } from './Settings';
 import type { PipelineSettings } from '../api';
+
+// Settings uses <Link to="/settings/targeting"> for the sub-page
+// pointer — react-router-dom requires a Router context. Wrapping
+// here keeps the tests independent of main.tsx's full route tree.
+function renderSettings() {
+  return render(
+    <MemoryRouter>
+      <Settings />
+    </MemoryRouter>
+  );
+}
 
 const defaults: PipelineSettings = {
   pipelineEnabled: true,
@@ -56,7 +68,7 @@ describe('Settings', () => {
     stubFetch({
       '/settings': () => json(200, defaults),
     });
-    render(<Settings />);
+    renderSettings();
     expect(screen.getByText('Loading…')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText('pipelineEnabled')).toBeInTheDocument();
@@ -73,7 +85,7 @@ describe('Settings', () => {
     stubFetch({
       '/settings': () => new Response('boom', { status: 500 }),
     });
-    render(<Settings />);
+    renderSettings();
     await waitFor(() => {
       expect(screen.getByText(/Could not load settings/i)).toBeInTheDocument();
     });
@@ -86,7 +98,7 @@ describe('Settings', () => {
       stagePauseReasons: { audit: 'budget' },
     };
     stubFetch({ '/settings': () => json(200, paused) });
-    render(<Settings />);
+    renderSettings();
     await waitFor(() => {
       expect(screen.getByText(/auto-paused: budget/i)).toBeInTheDocument();
     });
@@ -105,7 +117,7 @@ describe('Settings', () => {
         return json(200, defaults);
       },
     });
-    render(<Settings />);
+    renderSettings();
     await waitFor(() => screen.getByLabelText('pipelineEnabled'));
 
     fireEvent.click(screen.getByLabelText('pipelineEnabled'));
@@ -124,7 +136,7 @@ describe('Settings', () => {
 
   it('shows the cost preview total', async () => {
     stubFetch({ '/settings': () => json(200, defaults) });
-    render(<Settings />);
+    renderSettings();
     await waitFor(() => screen.getByLabelText('pipelineEnabled'));
     // Defaults give a specific computed total; assert the section is there
     // and the total figure appears.
@@ -139,7 +151,7 @@ describe('Settings', () => {
       '/settings': (init) =>
         init?.method === 'PATCH' ? new Response('nope', { status: 403 }) : json(200, defaults),
     });
-    render(<Settings />);
+    renderSettings();
     await waitFor(() => screen.getByLabelText('pipelineEnabled'));
     fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
     await waitFor(() => {

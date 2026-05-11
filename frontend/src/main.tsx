@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Queue from './pages/Queue';
 import Settings from './pages/Settings';
+import Targeting from './pages/Targeting';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element in index.html');
@@ -28,6 +29,7 @@ createRoot(root).render(
             <Route index element={<Dashboard />} />
             <Route path="queue" element={<Queue />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="settings/targeting" element={<Targeting />} />
           </Route>
         </Route>
       </Routes>

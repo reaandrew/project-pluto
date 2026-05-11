@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getSettings, patchSettings, type PipelineSettings } from '../api';
 
 // Settings is the operator's edit surface for the singleton
@@ -74,6 +75,9 @@ export default function Settings() {
   return (
     <div>
       <h2>Pipeline settings</h2>
+      <p style={{ color: '#666' }}>
+        See also: <Link to="/settings/targeting">Targeting profiles</Link>.
+      </p>
 
       <form onSubmit={onSubmit}>
         <section style={section}>
