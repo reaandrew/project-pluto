@@ -15,7 +15,7 @@ Go 1.24, AWS Lambda, `provided.al2023` x86_64. Each service is `lambdas/<name>/`
 1. **Kill switch** — `pkg/killswitch.Allowed(ctx, "<stage>")` first; bail with success on disabled.
 2. **Idempotency** — wrap pure work in `pkg/idempotency.WithIdempotency[T](ctx, key, fn)` keyed on the producer-supplied event `id` or a deterministic stable hash.
 3. **Cost cap** — for any paid call (Bedrock, Google Places, screenshots), wrap in `pkg/cost.WithCostCap(ctx, stage, fn)`; record on success.
-4. **Polite fetch** — outbound HTTP goes through `pkg/politefetch.Client` (robots.txt + 1 req/s + ETag cache). Never `http.Get` directly against external sites.
+4. **Polite fetch** — outbound HTTP to **scrape-style targets** (the business's own homepage, contact page, screenshot of original site — anywhere robots.txt applies) goes through `pkg/politefetch.Client` (robots.txt + 1 req/s + ETag cache). Authenticated official APIs that publish their own rate-limit contract (Companies House, Google Places, Bedrock, SES, KMS, Cloudflare) use plain `http.Client` with auth headers — robots.txt doesn't apply and politefetch's ETag cache is wrong for JSON APIs. Both paths inject an `HTTPDoer` interface for tests so neither hits the network in unit tests.
 5. **Cache TTL** — Bedrock outputs cached in DynamoDB with `expires_at` (TTL-enabled); cache key includes prompt version.
 
 ## Conventions

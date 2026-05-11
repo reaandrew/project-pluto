@@ -90,6 +90,10 @@ func (f *fakeDDB) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ .
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (f *fakeDDB) Query(_ context.Context, _ *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
+
 // setup primes ITEMS_TABLE + a fresh fakeDDB. Returns the fake.
 func setup(t *testing.T) *fakeDDB {
 	t.Helper()

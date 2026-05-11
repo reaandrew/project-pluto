@@ -46,6 +46,9 @@ func (fakeDDBClient) Scan(_ context.Context, _ *dynamodb.ScanInput, _ ...func(*d
 func (fakeDDBClient) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	return &dynamodb.DeleteItemOutput{}, nil
 }
+func (fakeDDBClient) Query(_ context.Context, _ *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
 
 // setupInvoke wires fakes for Bedrock + DDB for the duration of one test.
 // Returns the bedrock fake so the test can preload its response body or

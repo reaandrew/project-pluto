@@ -29,6 +29,10 @@ func (stubAPI) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ ...f
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (stubAPI) Query(_ context.Context, _ *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
+
 func TestSetClientOverridesAndClientReturnsIt(t *testing.T) {
 	t.Cleanup(func() { SetClient(nil) })
 
