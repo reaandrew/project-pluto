@@ -43,6 +43,42 @@ export const BASENAME = cfg.basename ?? '/';
 // before the Cognito stack is reachable.
 export const COGNITO_LOGIN_URL = cfg.cognitoHostedLoginUrl ?? '';
 
+// signOutAndRedirect handles the "stale auth_token cookie" case: the
+// cookie is present (so AuthGuard let the user in) but the BFF's JWT
+// validation rejects it with 401. Clear the cookie so future calls
+// don't repeat the same dance, then bounce back through Cognito.
+// Exported so individual callers can invoke it on explicit sign-out
+// too (future "Sign out" link in the nav).
+function signOutAndRedirect(): void {
+  document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  if (COGNITO_LOGIN_URL) {
+    window.location.replace(COGNITO_LOGIN_URL);
+  }
+}
+
+// authedFetch wraps fetch with the cookie-credentials + Accept-JSON
+// boilerplate every BFF call needs, AND the 401-handling behaviour:
+// a 401 response means the auth_token cookie is no longer valid
+// (expired token, server rotated, tampered cookie), so we clear it
+// and redirect to Cognito Hosted UI. The caller still gets a
+// rejected promise so the page can render a sensible interim state
+// while the redirect is in flight.
+async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(input, {
+    credentials: 'include',
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init.headers ?? {}),
+    },
+  });
+  if (res.status === 401) {
+    signOutAndRedirect();
+    throw new Error('Session expired — redirecting to sign-in');
+  }
+  return res;
+}
+
 export interface HealthResponse {
   message: string;
   env: string;
@@ -52,10 +88,7 @@ export interface HealthResponse {
 }
 
 export async function getHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${cfg.bffBaseUrl}/health`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
+  const res = await authedFetch(`${cfg.bffBaseUrl}/health`);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} from ${cfg.bffBaseUrl}/health`);
   }
@@ -116,10 +149,7 @@ export interface PipelineSettings {
 }
 
 export async function getSettings(): Promise<PipelineSettings> {
-  const res = await fetch(`${cfg.bffBaseUrl}/settings`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
+  const res = await authedFetch(`${cfg.bffBaseUrl}/settings`);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} from ${cfg.bffBaseUrl}/settings`);
   }
@@ -127,10 +157,9 @@ export async function getSettings(): Promise<PipelineSettings> {
 }
 
 export async function patchSettings(patch: Partial<PipelineSettings>): Promise<PipelineSettings> {
-  const res = await fetch(`${cfg.bffBaseUrl}/settings`, {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/settings`, {
     method: 'PATCH',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
