@@ -35,7 +35,10 @@ test.describe('health', () => {
     if (ENVIRONMENT !== 'unknown') {
       await expect(page.locator('code').first()).toHaveText(ENVIRONMENT);
     }
-    // The Hello component fetches /health; wait for it to render.
-    await expect(page.locator('h2')).toContainText('API health', { timeout: 15_000 });
+    // Dashboard h2 renders immediately. The h3 only appears once the BFF
+    // /health fetch resolves and Dashboard.tsx swaps out the "Loading…"
+    // state — that's the signal the round-trip worked.
+    await expect(page.locator('h2')).toHaveText('Dashboard');
+    await expect(page.locator('h3')).toContainText('BFF /health', { timeout: 15_000 });
   });
 });

@@ -32,6 +32,7 @@ case "${MODE}" in
     BFF_URL="https://bff.${BASE_DOMAIN}"
     API_URL="https://api.${BASE_DOMAIN}"
     ENV_LABEL="production"
+    BASENAME="/"
     ;;
   preview)
     if [[ -z "${ENV_NAME}" || "${ENV_NAME}" == "production" ]]; then
@@ -45,6 +46,9 @@ case "${MODE}" in
     BFF_URL="https://${ENV_NAME}.bff.${BASE_DOMAIN}"
     API_URL="https://api-${ENV_NAME}.${BASE_DOMAIN}"
     ENV_LABEL="${ENV_NAME}"
+    # Preview SPAs are served under /<env>/ — react-router needs this as
+    # its basename so client-side links match the browser URL.
+    BASENAME="/${ENV_NAME}"
     ;;
   *)
     echo "::error::unknown mode ${MODE} — expected prod or preview"
@@ -60,6 +64,7 @@ window.__FINANCE_CONFIG__ = {
   apiBaseUrl: "${API_URL}",
   environment: "${ENV_LABEL}",
   gitSha: "${GIT_SHA}",
+  basename: "${BASENAME}",
 };
 EOF
 
