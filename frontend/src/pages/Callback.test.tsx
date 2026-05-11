@@ -53,7 +53,7 @@ describe('Callback', () => {
 
   it('exchanges code, sets cookie, and navigates home on success', async () => {
     sessionStorage.setItem('pkce_verifier', 'v123');
-    const fetchSpy = vi.fn((_url: string, _init?: RequestInit) =>
+    const fetchSpy = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() =>
       Promise.resolve(
         new Response(JSON.stringify({ id_token: 'eyJ-id-token' }), {
           status: 200,
