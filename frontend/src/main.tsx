@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import App from './App';
+import AuthGuard from './AuthGuard';
 import { BASENAME } from './api';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -16,10 +17,15 @@ createRoot(root).render(
     <BrowserRouter basename={BASENAME}>
       <Routes>
         <Route path="/" element={<App />}>
-          <Route index element={<Dashboard />} />
-          <Route path="queue" element={<Queue />} />
-          <Route path="settings" element={<Settings />} />
+          {/* /login is public — needs to be reachable when unauthenticated. */}
           <Route path="login" element={<Login />} />
+          {/* All other routes pass through AuthGuard, which bounces
+              unauthenticated callers to the Cognito Hosted UI. */}
+          <Route element={<AuthGuard />}>
+            <Route index element={<Dashboard />} />
+            <Route path="queue" element={<Queue />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

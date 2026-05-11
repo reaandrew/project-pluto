@@ -58,6 +58,23 @@ esac
 # Generate per-env runtime-config.js BEFORE the sync so it lands in the same place
 # as index.html.
 GIT_SHA="${GITHUB_SHA:-$(git -C "$(dirname "${DIST_DIR}")" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+
+# Cognito Hosted UI login URL — built from env vars set by the Deploy
+# workflow's "Capture endpoints" step (terraform output -raw …). The
+# callback URL has to match terraform/cognito.tf's `callback_urls`
+# exactly, so keep them in lockstep when either side changes.
+COGNITO_LOGIN_URL=""
+if [[ -n "${COGNITO_HOSTED_UI_DOMAIN:-}" && -n "${COGNITO_APP_CLIENT_ID:-}" ]]; then
+  case "${MODE}" in
+    prod)    CALLBACK="https://${BASE_DOMAIN}/oauth/callback" ;;
+    preview) CALLBACK="https://preview.${BASE_DOMAIN}/${ENV_NAME}/oauth/callback" ;;
+  esac
+  # The pieces in CALLBACK aren't user-supplied so URL-encoding the two
+  # chars Cognito cares about (`:` and `/`) is enough.
+  ENC_CALLBACK=$(printf '%s' "${CALLBACK}" | sed -e 's#:#%3A#g' -e 's#/#%2F#g')
+  COGNITO_LOGIN_URL="https://${COGNITO_HOSTED_UI_DOMAIN}.auth.${AWS_REGION:-eu-west-2}.amazoncognito.com/login?client_id=${COGNITO_APP_CLIENT_ID}&response_type=code&scope=email+openid+profile&redirect_uri=${ENC_CALLBACK}"
+fi
+
 cat > "${DIST_DIR}/runtime-config.js" <<EOF
 window.__FINANCE_CONFIG__ = {
   bffBaseUrl: "${BFF_URL}",
@@ -65,6 +82,7 @@ window.__FINANCE_CONFIG__ = {
   environment: "${ENV_LABEL}",
   gitSha: "${GIT_SHA}",
   basename: "${BASENAME}",
+  cognitoHostedLoginUrl: "${COGNITO_LOGIN_URL}",
 };
 EOF
 

@@ -455,16 +455,26 @@ jobs:
           API_DOMAIN=$(terraform output -raw api_custom_domain)
           BFF_URL=$(terraform output -raw bff_url)
           FE_URL=$(terraform output -raw frontend_url)
+          COGNITO_HOSTED_UI_DOMAIN=$(terraform output -raw cognito_hosted_ui_domain)
+          COGNITO_APP_CLIENT_ID=$(terraform output -raw cognito_app_client_id)
           echo "api_endpoint=${API_DOMAIN}" >> "$GITHUB_OUTPUT"
           echo "bff_endpoint=${BFF_URL}" >> "$GITHUB_OUTPUT"
           echo "frontend_url=${FE_URL}" >> "$GITHUB_OUTPUT"
+          echo "cognito_hosted_ui_domain=${COGNITO_HOSTED_UI_DOMAIN}" >> "$GITHUB_OUTPUT"
+          echo "cognito_app_client_id=${COGNITO_APP_CLIENT_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy frontend (PROD)
         if: env.IS_MAIN == 'true' && github.event_name == 'push' && needs.build-frontend.result == 'success'
+        env:
+          COGNITO_HOSTED_UI_DOMAIN: ${{ steps.urls.outputs.cognito_hosted_ui_domain }}
+          COGNITO_APP_CLIENT_ID: ${{ steps.urls.outputs.cognito_app_client_id }}
         run: ./scripts/deploy-frontend.sh prod
 
       - name: Deploy frontend (PREVIEW)
         if: env.IS_MAIN == 'false' && needs.build-frontend.result == 'success'
+        env:
+          COGNITO_HOSTED_UI_DOMAIN: ${{ steps.urls.outputs.cognito_hosted_ui_domain }}
+          COGNITO_APP_CLIENT_ID: ${{ steps.urls.outputs.cognito_app_client_id }}
         run: ./scripts/deploy-frontend.sh preview "${ENVIRONMENT}"
 
       - name: Sticky PR comment

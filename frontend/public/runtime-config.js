@@ -6,4 +6,7 @@ window.__FINANCE_CONFIG__ = {
   environment: 'local',
   gitSha: 'dev',
   basename: '/',
+  // Empty disables the AuthGuard redirect so `npm run dev` doesn't bounce
+  // you out to a Cognito URL that may not be reachable from localhost.
+  cognitoHostedLoginUrl: '',
 };

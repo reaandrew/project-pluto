@@ -10,6 +10,12 @@ export interface RuntimeConfig {
   // '/<env>'. BrowserRouter consumes this so the router's path matching
   // lines up with what the browser shows.
   basename?: string;
+  // Full Cognito Hosted UI login URL with client_id, redirect_uri, scopes,
+  // and response_type baked in. AuthGuard sends unauthenticated callers
+  // here. Empty string at boot means "auth not configured for this env"
+  // and disables the guard (useful for local `npm run dev` before the
+  // operator stack is up).
+  cognitoHostedLoginUrl?: string;
 }
 
 declare global {
@@ -24,6 +30,7 @@ const cfg: RuntimeConfig = window.__FINANCE_CONFIG__ ?? {
   environment: 'unknown',
   gitSha: 'unknown',
   basename: '/',
+  cognitoHostedLoginUrl: '',
 };
 
 export const ENV = cfg.environment;
@@ -32,6 +39,9 @@ export const GIT_SHA = cfg.gitSha;
 // either a fresh local dev session or a production deploy from before
 // this field was introduced.
 export const BASENAME = cfg.basename ?? '/';
+// Empty string disables the AuthGuard redirect; useful for local dev
+// before the Cognito stack is reachable.
+export const COGNITO_LOGIN_URL = cfg.cognitoHostedLoginUrl ?? '';
 
 export interface HealthResponse {
   message: string;
