@@ -248,6 +248,22 @@ resource "aws_iam_role_policy" "lambda_deploy" {
         Resource = "arn:aws:lambda:*:${var.aws_account_id}:function:ai-website-agency-*"
       },
       {
+        # Event source mappings (SQS → Lambda) — first added in iter 2.3
+        # for the audit Lambda. Resource ARN family is
+        # `arn:aws:lambda:*:<acct>:event-source-mapping:*` which doesn't
+        # match the function-name wildcard above; widen to a separate
+        # statement scoped per-action.
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateEventSourceMapping",
+          "lambda:DeleteEventSourceMapping",
+          "lambda:GetEventSourceMapping",
+          "lambda:UpdateEventSourceMapping",
+          "lambda:ListEventSourceMappings",
+        ]
+        Resource = "*"
+      },
+      {
         Effect   = "Allow"
         Action   = "iam:PassRole"
         Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
