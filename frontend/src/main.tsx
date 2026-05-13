@@ -7,6 +7,7 @@ import { BASENAME } from './api';
 import Callback from './pages/Callback';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
+import Metrics from './pages/Metrics';
 import Queue from './pages/Queue';
 import Settings from './pages/Settings';
 import Targeting from './pages/Targeting';
@@ -30,6 +31,7 @@ createRoot(root).render(
             <Route path="queue" element={<Queue />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/targeting" element={<Targeting />} />
+            <Route path="metrics" element={<Metrics />} />
           </Route>
         </Route>
       </Routes>

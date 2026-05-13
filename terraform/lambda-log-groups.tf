@@ -56,3 +56,10 @@ resource "aws_cloudwatch_log_group" "discover" {
   retention_in_days = 30
   tags              = local.common_tags
 }
+
+# nosemgrep: terraform.aws.security.aws-cloudwatch-log-group-unencrypted.aws-cloudwatch-log-group-unencrypted
+resource "aws_cloudwatch_log_group" "api_metrics" {
+  name              = "/aws/lambda/ai-website-agency-api-metrics${local.env_suffix}"
+  retention_in_days = 30
+  tags              = local.common_tags
+}

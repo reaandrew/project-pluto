@@ -289,3 +289,44 @@ export async function deleteTargetingProfile(id: string): Promise<void> {
     throw new Error(`HTTP ${res.status} from DELETE ${cfg.bffBaseUrl}/targeting/${id}: ${text}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// /metrics — discoveries widget (iter 1.4)
+// ---------------------------------------------------------------------------
+
+export interface DiscoveryRow {
+  id: string;
+  name: string;
+  domain: string;
+  vertical: string;
+  location: string;
+  source: string;
+  confidence: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface DiscoveriesResponse {
+  recent: DiscoveryRow[];
+  countsByDay: Record<string, number>;
+  totalLast7Day: number;
+}
+
+export async function getDiscoveries(): Promise<DiscoveriesResponse> {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/metrics/discoveries`);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from GET ${cfg.bffBaseUrl}/metrics/discoveries`);
+  }
+  return (await res.json()) as DiscoveriesResponse;
+}
+
+export async function runDiscoveryNow(): Promise<{ status: string; startedAt: string }> {
+  const res = await authedFetch(`${cfg.bffBaseUrl}/metrics/discoveries/run`, { method: 'POST' });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `HTTP ${res.status} from POST ${cfg.bffBaseUrl}/metrics/discoveries/run: ${text}`
+    );
+  }
+  return (await res.json()) as { status: string; startedAt: string };
+}
