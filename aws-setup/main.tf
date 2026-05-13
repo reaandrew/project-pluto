@@ -260,6 +260,14 @@ resource "aws_iam_role_policy" "lambda_deploy" {
           "lambda:GetEventSourceMapping",
           "lambda:UpdateEventSourceMapping",
           "lambda:ListEventSourceMappings",
+          # Terraform tags the event-source-mapping on create; the
+          # tag actions resolve against the event-source-mapping ARN
+          # family, which the function-scoped statement above doesn't
+          # cover. Grant on the wildcard resource alongside the CRUD
+          # actions.
+          "lambda:TagResource",
+          "lambda:UntagResource",
+          "lambda:ListTags",
         ]
         Resource = "*"
       },
