@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pitfall #3 (tripwire bc96561): committed placeholder so `terraform plan` works on
+# a fresh checkout BEFORE Go has built the real binary. CI overwrites this with
+# the compiled bootstrap before `terraform apply`. Manual `terraform plan` from
+# a dev machine works the same.
+echo "placeholder — replace with `go build -o bootstrap` before deploying"
+exit 1
