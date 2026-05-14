@@ -248,6 +248,30 @@ resource "aws_iam_role_policy" "lambda_deploy" {
         Resource = "arn:aws:lambda:*:${var.aws_account_id}:function:ai-website-agency-*"
       },
       {
+        # Event source mappings (SQS → Lambda) — first added in iter 2.3
+        # for the audit Lambda. Resource ARN family is
+        # `arn:aws:lambda:*:<acct>:event-source-mapping:*` which doesn't
+        # match the function-name wildcard above; widen to a separate
+        # statement scoped per-action.
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateEventSourceMapping",
+          "lambda:DeleteEventSourceMapping",
+          "lambda:GetEventSourceMapping",
+          "lambda:UpdateEventSourceMapping",
+          "lambda:ListEventSourceMappings",
+          # Terraform tags the event-source-mapping on create; the
+          # tag actions resolve against the event-source-mapping ARN
+          # family, which the function-scoped statement above doesn't
+          # cover. Grant on the wildcard resource alongside the CRUD
+          # actions.
+          "lambda:TagResource",
+          "lambda:UntagResource",
+          "lambda:ListTags",
+        ]
+        Resource = "*"
+      },
+      {
         Effect   = "Allow"
         Action   = "iam:PassRole"
         Resource = "arn:aws:iam::${var.aws_account_id}:role/ai-website-agency-*"
