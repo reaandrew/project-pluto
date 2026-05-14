@@ -77,8 +77,6 @@ func Render(in Input) (string, error) {
 		return "", fmt.Errorf("sitebundle: render footer: %w", err)
 	}
 
-	// nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type
-	//
 	// The strings we wrap as template.HTML here are NOT user-controlled
 	// at this boundary — each one came out of a sibling `html/template`
 	// pipeline (components.RenderSection / components.RenderFooter)
@@ -87,12 +85,14 @@ func Render(in Input) (string, error) {
 	// double-encode the per-section markup and corrupt the page. The
 	// pattern is "compose pre-escaped fragments into a wrapper
 	// template", not "splat raw user input into a template".
+	sectionsHTMLSafe := template.HTML(sectionsHTML.String()) // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type
+	footerHTMLSafe := template.HTML(footer)                  // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type
 	tplData := documentData{
 		Lang:              "en",
 		Title:             in.Spec.SEO.Title,
 		Description:       in.Spec.SEO.Description,
-		Sections:          template.HTML(sectionsHTML.String()),
-		Footer:            template.HTML(footer),
+		Sections:          sectionsHTMLSafe,
+		Footer:            footerHTMLSafe,
 		PrimaryColor:      in.Spec.Brand.Palette.Primary,
 		NeutralDarkColor:  in.Spec.Brand.Palette.NeutralDark,
 		NeutralLightColor: in.Spec.Brand.Palette.NeutralLight,
