@@ -475,10 +475,14 @@ resource "aws_iam_role_policy" "ssm_access" {
         Resource = [
           "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/app/*",
           "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/secret/*",
-          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/kms/*",       # iter 0.C.8 — passcode CMK alias ARN
-          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/cognito/*",   # future: cognito IDs for the admin app
-          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/ses/*",       # future: SES handles for the sender Lambda
-          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/providers/*", # iter 1.3 — Companies House + Google Places API keys
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/kms/*",        # iter 0.C.8 — passcode CMK alias ARN
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/cognito/*",    # future: cognito IDs for the admin app
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/ses/*",        # future: SES handles for the sender Lambda
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/providers/*",  # iter 1.3 — Companies House + Google Places + PageSpeed API keys
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/r2/*",         # iter 5.3 — Cloudflare R2 access key + secret
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/cloudflare/*", # iter 5.3 — Cloudflare account ID + KV namespace + API token
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/passcode/*",   # iter 5.3 — passcode salt
+          "arn:aws:ssm:*:${var.aws_account_id}:parameter/ai-website-agency/*/preview/*",    # iter 5.3 — preview URL base
         ]
       },
     ]
