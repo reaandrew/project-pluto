@@ -44,6 +44,16 @@ func Groups(req events.APIGatewayV2HTTPRequest) []string {
 	return parseGroups(req.RequestContext.Authorizer.JWT.Claims["cognito:groups"])
 }
 
+// Sub returns the caller's verified `sub` claim — the Cognito user UUID
+// — used as the `actor` field on Feedback rows + events. Returns the
+// empty string when no authorizer context is attached.
+func Sub(req events.APIGatewayV2HTTPRequest) string {
+	if req.RequestContext.Authorizer == nil || req.RequestContext.Authorizer.JWT == nil {
+		return ""
+	}
+	return req.RequestContext.Authorizer.JWT.Claims["sub"]
+}
+
 // parseGroups normalises the stringified groups claim into a slice of
 // plain group names. Whitespace, commas, brackets, and double-quotes
 // are stripped — i.e. it accepts every observed serialization form.
