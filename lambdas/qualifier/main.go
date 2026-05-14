@@ -50,6 +50,7 @@ import (
 	"github.com/reaandrew/ai-website-agency/lambdas/pkg/killswitch"
 	applog "github.com/reaandrew/ai-website-agency/lambdas/pkg/log"
 	"github.com/reaandrew/ai-website-agency/lambdas/pkg/qualifier"
+	"github.com/reaandrew/ai-website-agency/lambdas/pkg/queue"
 	"github.com/reaandrew/ai-website-agency/lambdas/pkg/targeting"
 )
 
@@ -94,12 +95,24 @@ type runDeps struct {
 	GetBusiness      func(ctx context.Context, businessID string) (*BusinessRow, error)
 	ListProfiles     func(ctx context.Context) ([]targeting.Profile, error)
 	PutQualification func(ctx context.Context, row QualificationRow) error
-	UpdateBusiness   func(ctx context.Context, businessID, newStatus string) error
+	UpdateBusiness   func(ctx context.Context, in BusinessUpdate) error
 	PublishQualified func(ctx context.Context, env pkgevents.Envelope[WebsiteQualifiedDetail]) error
 	PublishRejected  func(ctx context.Context, env pkgevents.Envelope[WebsiteRejectedDetail]) error
 	Threshold        func(ctx context.Context) (int, error)
+	MaxReviewQueue   func(ctx context.Context) (int, error)
+	CountActiveSlots func(ctx context.Context) (int, error)
 	Now              func() time.Time
 	NewQualID        func() string
+}
+
+// BusinessUpdate carries the fields the qualifier flips on the Business
+// row. priorityScore is encoded into gsi1sk so /candidates can sort
+// by priority directly off the index.
+type BusinessUpdate struct {
+	BusinessID        string
+	NewStatus         string
+	PriorityScore     float64
+	AwaitingPromotion bool
 }
 
 func handle(ctx context.Context, raw lambdaevents.SQSEvent) (lambdaevents.SQSEventResponse, error) {
@@ -177,6 +190,32 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[AuditComplete
 	qualID := d.NewQualID()
 	now := d.Now().UTC().Format(time.RFC3339)
 
+	// Backlog gate (iter 3.3). Only relevant when qualified. If the
+	// active review-queue is at cap, mark the Business row
+	// awaitingPromotion=true and skip the website.qualified publish;
+	// the backlog-promoter Lambda promotes it later when a slot frees.
+	awaitingPromotion := false
+	if qualified {
+		maxQueue, err := d.MaxReviewQueue(ctx)
+		if err != nil {
+			return fmt.Errorf("qualifier: lookup max review queue: %w", err)
+		}
+		if maxQueue > 0 {
+			active, err := d.CountActiveSlots(ctx)
+			if err != nil {
+				return fmt.Errorf("qualifier: count active slots: %w", err)
+			}
+			if active >= maxQueue {
+				awaitingPromotion = true
+				logger.Info("qualifier.backlogged",
+					"active", active,
+					"max", maxQueue,
+					"metric", "pipeline.qualifier.backlogged",
+				)
+			}
+		}
+	}
+
 	row := QualificationRow{
 		PK:                 "BUSINESS#" + biz.ID,
 		SK:                 "QUAL#" + qualID,
@@ -197,14 +236,19 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[AuditComplete
 	if qualified {
 		newStatus = "qualified"
 	}
-	if err := d.UpdateBusiness(ctx, biz.ID, newStatus); err != nil {
+	if err := d.UpdateBusiness(ctx, BusinessUpdate{
+		BusinessID:        biz.ID,
+		NewStatus:         newStatus,
+		PriorityScore:     priorityScore,
+		AwaitingPromotion: awaitingPromotion,
+	}); err != nil {
 		// Status update failure isn't fatal — the Qualification row is
 		// the source of truth and downstream consumers read it. Log
 		// + carry on.
 		logger.Error("qualifier.business.update_status_failed", "err", err)
 	}
 
-	if qualified {
+	if qualified && !awaitingPromotion {
 		out := pkgevents.New("website.qualified", consumerName, WebsiteQualifiedDetail{
 			BusinessID:      biz.ID,
 			QualificationID: qualID,
@@ -214,7 +258,7 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[AuditComplete
 		if err := d.PublishQualified(ctx, out); err != nil {
 			return fmt.Errorf("qualifier: publish website.qualified: %w", err)
 		}
-	} else {
+	} else if !qualified {
 		out := pkgevents.New("website.rejected", consumerName, WebsiteRejectedDetail{
 			BusinessID:      biz.ID,
 			QualificationID: qualID,
@@ -228,6 +272,7 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[AuditComplete
 	}
 	logger.Info("qualifier.decided",
 		"qualified", qualified,
+		"awaitingPromotion", awaitingPromotion,
 		"priorityScore", priorityScore,
 		"threshold", threshold,
 		"qualificationId", qualID,
@@ -424,10 +469,20 @@ func buildDeps(ctx context.Context) (runDeps, error) {
 		PublishRejected: func(ctx context.Context, env pkgevents.Envelope[WebsiteRejectedDetail]) error {
 			return pkgevents.Publish(ctx, publisher, env)
 		},
-		Threshold: thresholdFromSettings,
-		Now:       time.Now,
-		NewQualID: func() string { return randomHex(16) },
+		Threshold:        thresholdFromSettings,
+		MaxReviewQueue:   maxReviewQueueFromSettings,
+		CountActiveSlots: queue.CountActiveSlots,
+		Now:              time.Now,
+		NewQualID:        func() string { return randomHex(16) },
 	}, nil
+}
+
+func maxReviewQueueFromSettings(ctx context.Context) (int, error) {
+	s, err := killswitch.Get(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return s.Caps.MaxReviewQueueSize, nil
 }
 
 func thresholdFromSettings(ctx context.Context) (int, error) {
@@ -507,10 +562,13 @@ func putQualification(ctx context.Context, row QualificationRow) error {
 	return nil
 }
 
-// updateBusinessStatus flips Business.status and refreshes gsi1pk +
-// updatedAt. gsi1 is keyed on status, so the metrics widget needs the
-// row to move partitions when the status changes.
-func updateBusinessStatus(ctx context.Context, businessID, newStatus string) error {
+// updateBusinessStatus flips Business.status, refreshes gsi1pk +
+// gsi1sk (priority-encoded for /candidates sort), sets
+// awaitingPromotion, and bumps updatedAt. gsi1sk encoding matches
+// queue.EncodeGSI1SK so the backlog promoter (iter 3.3) can find the
+// highest-priority backlog entry via a single Query with
+// ScanIndexForward=false.
+func updateBusinessStatus(ctx context.Context, in BusinessUpdate) error {
 	client, err := ddb.Client(ctx)
 	if err != nil {
 		return err
@@ -519,16 +577,18 @@ func updateBusinessStatus(ctx context.Context, businessID, newStatus string) err
 	_, err = client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(ddb.TableName()),
 		Key: map[string]dtypes.AttributeValue{
-			"pk": &dtypes.AttributeValueMemberS{Value: "BUSINESS#" + businessID},
+			"pk": &dtypes.AttributeValueMemberS{Value: "BUSINESS#" + in.BusinessID},
 			"sk": &dtypes.AttributeValueMemberS{Value: "PROFILE"},
 		},
-		UpdateExpression: aws.String("SET #s = :s, gsi1pk = :pk, updatedAt = :ts"),
+		UpdateExpression: aws.String("SET #s = :s, gsi1pk = :pk, gsi1sk = :sk, awaitingPromotion = :ap, updatedAt = :ts"),
 		ExpressionAttributeNames: map[string]string{
 			"#s": "status",
 		},
 		ExpressionAttributeValues: map[string]dtypes.AttributeValue{
-			":s":  &dtypes.AttributeValueMemberS{Value: newStatus},
-			":pk": &dtypes.AttributeValueMemberS{Value: "BUSINESS#STATUS#" + newStatus},
+			":s":  &dtypes.AttributeValueMemberS{Value: in.NewStatus},
+			":pk": &dtypes.AttributeValueMemberS{Value: "BUSINESS#STATUS#" + in.NewStatus},
+			":sk": &dtypes.AttributeValueMemberS{Value: queue.EncodeGSI1SK(in.PriorityScore, in.BusinessID)},
+			":ap": &dtypes.AttributeValueMemberBOOL{Value: in.AwaitingPromotion},
 			":ts": &dtypes.AttributeValueMemberS{Value: now},
 		},
 		ConditionExpression: aws.String("attribute_exists(pk)"),
@@ -540,7 +600,7 @@ func updateBusinessStatus(ctx context.Context, businessID, newStatus string) err
 			// already-handled rather than DLQ.
 			return nil
 		}
-		return fmt.Errorf("update business %s status: %w", businessID, err)
+		return fmt.Errorf("update business %s status: %w", in.BusinessID, err)
 	}
 	return nil
 }
