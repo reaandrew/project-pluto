@@ -84,3 +84,10 @@ resource "aws_cloudwatch_log_group" "backlog_promoter" {
   retention_in_days = 30
   tags              = local.common_tags
 }
+
+# nosemgrep: terraform.aws.security.aws-cloudwatch-log-group-unencrypted.aws-cloudwatch-log-group-unencrypted
+resource "aws_cloudwatch_log_group" "spec_generator" {
+  name              = "/aws/lambda/ai-website-agency-spec-generator${local.env_suffix}"
+  retention_in_days = 30
+  tags              = local.common_tags
+}
