@@ -76,6 +76,7 @@ func setupKillSwitch(t *testing.T, on bool) {
 type captured struct {
 	qualification     QualificationRow
 	statusUpdates     []string
+	lastUpdate        BusinessUpdate
 	publishedQualOK   bool
 	publishedRejectOK bool
 	publishedQual     pkgevents.Envelope[WebsiteQualifiedDetail]
@@ -161,8 +162,9 @@ func newDeps(t *testing.T, c *captured, audit *AuditRow, biz *BusinessRow, profi
 			c.qualification = row
 			return nil
 		},
-		UpdateBusiness: func(_ context.Context, _, newStatus string) error {
-			c.statusUpdates = append(c.statusUpdates, newStatus)
+		UpdateBusiness: func(_ context.Context, in BusinessUpdate) error {
+			c.statusUpdates = append(c.statusUpdates, in.NewStatus)
+			c.lastUpdate = in
 			return nil
 		},
 		PublishQualified: func(_ context.Context, env pkgevents.Envelope[WebsiteQualifiedDetail]) error {
@@ -175,9 +177,11 @@ func newDeps(t *testing.T, c *captured, audit *AuditRow, biz *BusinessRow, profi
 			c.publishedReject = env
 			return c.publishErr
 		},
-		Threshold: func(context.Context) (int, error) { return threshold, nil },
-		Now:       func() time.Time { return time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC) },
-		NewQualID: func() string { return "qual-1" },
+		Threshold:        func(context.Context) (int, error) { return threshold, nil },
+		MaxReviewQueue:   func(context.Context) (int, error) { return 20, nil },
+		CountActiveSlots: func(context.Context) (int, error) { return 0, nil },
+		Now:              func() time.Time { return time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC) },
+		NewQualID:        func() string { return "qual-1" },
 	}
 }
 
@@ -220,6 +224,81 @@ func TestRunOne_WeakSiteQualifies(t *testing.T) {
 	}
 	if len(c.statusUpdates) != 1 || c.statusUpdates[0] != "qualified" {
 		t.Errorf("status update = %v, want [qualified]", c.statusUpdates)
+	}
+	if c.lastUpdate.AwaitingPromotion {
+		t.Errorf("unbacklogged path should not set awaitingPromotion")
+	}
+	if c.lastUpdate.PriorityScore != c.qualification.PriorityScore {
+		t.Errorf("BusinessUpdate.PriorityScore drift: %.4f vs %.4f", c.lastUpdate.PriorityScore, c.qualification.PriorityScore)
+	}
+}
+
+// --- backlog gating -----------------------------------------------------
+
+func TestRunOne_QueueAtCap_QualifiedGoesToBacklog(t *testing.T) {
+	setupItemsTable(t)
+	c := &captured{}
+	a, b := weakAudit(), business("accountants", 0.9)
+	d := newDeps(t, c, a, b, []targeting.Profile{enabledProfile("accountants")}, 70)
+	// Queue is at cap — qualifier should backlog rather than publish.
+	d.MaxReviewQueue = func(context.Context) (int, error) { return 20, nil }
+	d.CountActiveSlots = func(context.Context) (int, error) { return 20, nil }
+
+	if err := processRecord(context.Background(), d, makeEnv(b.ID, a.ID)); err != nil {
+		t.Fatalf("processRecord: %v", err)
+	}
+	if !c.qualification.Qualified {
+		t.Error("backlog should still record qualified=true on the Qualification row")
+	}
+	if !c.lastUpdate.AwaitingPromotion {
+		t.Error("Business row should be marked awaitingPromotion=true")
+	}
+	if c.lastUpdate.NewStatus != "qualified" {
+		t.Errorf("Business status = %q, want qualified", c.lastUpdate.NewStatus)
+	}
+	if c.publishedQualOK || c.publishedRejectOK {
+		t.Errorf("backlogged item should NOT publish website.qualified; got qual=%v rej=%v",
+			c.publishedQualOK, c.publishedRejectOK)
+	}
+}
+
+func TestRunOne_QueueBelowCap_QualifiedPublishesNormally(t *testing.T) {
+	setupItemsTable(t)
+	c := &captured{}
+	a, b := weakAudit(), business("accountants", 0.9)
+	d := newDeps(t, c, a, b, []targeting.Profile{enabledProfile("accountants")}, 70)
+	d.MaxReviewQueue = func(context.Context) (int, error) { return 20, nil }
+	d.CountActiveSlots = func(context.Context) (int, error) { return 19, nil }
+
+	if err := processRecord(context.Background(), d, makeEnv(b.ID, a.ID)); err != nil {
+		t.Fatalf("processRecord: %v", err)
+	}
+	if c.lastUpdate.AwaitingPromotion {
+		t.Error("just-below-cap should NOT trigger backlog")
+	}
+	if !c.publishedQualOK {
+		t.Error("just-below-cap should publish website.qualified")
+	}
+}
+
+func TestRunOne_RejectedSkipsBacklogCheck(t *testing.T) {
+	setupItemsTable(t)
+	c := &captured{}
+	a, b := strongAudit(), business("accountants", 0.8)
+	called := 0
+	d := newDeps(t, c, a, b, []targeting.Profile{enabledProfile("accountants")}, 70)
+	d.CountActiveSlots = func(context.Context) (int, error) {
+		called++
+		return 99, nil
+	}
+	if err := processRecord(context.Background(), d, makeEnv(b.ID, a.ID)); err != nil {
+		t.Fatalf("processRecord: %v", err)
+	}
+	if called != 0 {
+		t.Errorf("rejected path should not query active slot count; got %d calls", called)
+	}
+	if !c.publishedRejectOK {
+		t.Error("expected website.rejected publish")
 	}
 }
 
