@@ -5,6 +5,7 @@ import App from './App';
 import AuthGuard from './AuthGuard';
 import { BASENAME } from './api';
 import Callback from './pages/Callback';
+import Candidate from './pages/Candidate';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Metrics from './pages/Metrics';
@@ -29,6 +30,7 @@ createRoot(root).render(
           <Route element={<AuthGuard />}>
             <Route index element={<Dashboard />} />
             <Route path="queue" element={<Queue />} />
+            <Route path="queue/:businessId" element={<Candidate />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/targeting" element={<Targeting />} />
             <Route path="metrics" element={<Metrics />} />

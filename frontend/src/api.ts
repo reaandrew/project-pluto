@@ -330,3 +330,165 @@ export async function runDiscoveryNow(): Promise<{ status: string; startedAt: st
   }
   return (await res.json()) as { status: string; startedAt: string };
 }
+
+// ---------------------------------------------------------------------------
+// /candidates — Spec review surface (iter 4.3)
+// ---------------------------------------------------------------------------
+// Shapes mirror lambdas/api-specs's SpecRow + the schemas.SpecV1 Go struct.
+// Anything added on the Go side has to land here too or the candidate page
+// silently round-trips stale data.
+
+export interface SpecCTA {
+  label: string;
+  action: 'call' | 'email' | 'form';
+}
+
+export interface SpecSubItem {
+  name?: string;
+  oneLine?: string;
+  q?: string;
+  a?: string;
+}
+
+export interface SpecBadge {
+  label: string;
+}
+
+export interface SpecSection {
+  type: 'hero' | 'services' | 'about' | 'trust' | 'faq' | 'cta' | 'contact';
+  headline?: string;
+  subheadline?: string;
+  primaryCta?: SpecCTA;
+  button?: SpecCTA;
+  imagePrompt?: string;
+  title?: string;
+  items?: SpecSubItem[];
+  paragraph?: string;
+  badges?: SpecBadge[];
+  address?: string;
+  phone?: string;
+  email?: string;
+  hours?: string;
+}
+
+export interface SpecPalette {
+  primary: string;
+  neutralDark: string;
+  neutralLight: string;
+}
+
+export interface SpecBrand {
+  tone: string;
+  palette: SpecPalette;
+  positioning: string;
+}
+
+export interface SpecSEO {
+  title: string;
+  description: string;
+  keywords?: string[];
+}
+
+export interface SpecConstraints {
+  doNotInventTestimonials: boolean;
+  doNotInventAwards: boolean;
+  doNotInventPrices: boolean;
+}
+
+export interface SpecV1Content {
+  brand: SpecBrand;
+  page: { sections: SpecSection[] };
+  seo: SpecSEO;
+  constraints: SpecConstraints;
+}
+
+export interface Spec {
+  id: string;
+  version: number;
+  status: 'draft' | 'approved' | 'rejected';
+  content: SpecV1Content;
+  modelId: string;
+  promptId: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  etag: string;
+}
+
+export interface CandidateBusiness {
+  id: string;
+  name: string;
+  domain: string;
+  vertical: string;
+  location: string;
+  status: string;
+}
+
+export interface CandidateResponse {
+  business: CandidateBusiness;
+  spec?: Spec;
+}
+
+export async function getCandidate(businessId: string): Promise<CandidateResponse> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from GET ${url}`);
+  }
+  return (await res.json()) as CandidateResponse;
+}
+
+export async function patchSpec(
+  businessId: string,
+  specId: string,
+  content: SpecV1Content,
+  notes?: string
+): Promise<Spec> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/specs/${encodeURIComponent(specId)}`;
+  const res = await authedFetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, notes }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from PATCH ${url}: ${text}`);
+  }
+  return (await res.json()) as Spec;
+}
+
+export async function approveSpec(
+  businessId: string,
+  specId: string,
+  notes?: string
+): Promise<Spec> {
+  return decideSpec(businessId, specId, 'approve', notes);
+}
+
+export async function rejectSpec(
+  businessId: string,
+  specId: string,
+  notes?: string
+): Promise<Spec> {
+  return decideSpec(businessId, specId, 'reject', notes);
+}
+
+async function decideSpec(
+  businessId: string,
+  specId: string,
+  decision: 'approve' | 'reject',
+  notes?: string
+): Promise<Spec> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/specs/${encodeURIComponent(specId)}/${decision}`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes: notes ?? '' }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+  return (await res.json()) as Spec;
+}
