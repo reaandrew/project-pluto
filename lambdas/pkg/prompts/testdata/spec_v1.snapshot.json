@@ -1,0 +1,392 @@
+{
+  "cacheTTL": "2160h0m0s",
+  "estimateUsd": 0.075,
+  "id": "spec.v1",
+  "maxTokens": 3000,
+  "modelId": "anthropic.claude-sonnet-4-6",
+  "schema": {
+    "$defs": {
+      "About": {
+        "additionalProperties": false,
+        "properties": {
+          "paragraph": {
+            "maxLength": 400,
+            "type": "string"
+          },
+          "type": {
+            "const": "about"
+          }
+        },
+        "required": [
+          "type",
+          "paragraph"
+        ],
+        "type": "object"
+      },
+      "CTA": {
+        "additionalProperties": false,
+        "properties": {
+          "button": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "call",
+                  "email",
+                  "form"
+                ],
+                "type": "string"
+              },
+              "label": {
+                "maxLength": 32,
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "action"
+            ],
+            "type": "object"
+          },
+          "headline": {
+            "maxLength": 80,
+            "type": "string"
+          },
+          "subheadline": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "type": {
+            "const": "cta"
+          }
+        },
+        "required": [
+          "type",
+          "headline",
+          "button"
+        ],
+        "type": "object"
+      },
+      "Contact": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "type": "string"
+          },
+          "hours": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "phone": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "type": {
+            "const": "contact"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "FAQ": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "a": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "q": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q",
+                "a"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": {
+            "const": "faq"
+          }
+        },
+        "required": [
+          "type",
+          "items"
+        ],
+        "type": "object"
+      },
+      "Hero": {
+        "additionalProperties": false,
+        "properties": {
+          "headline": {
+            "maxLength": 80,
+            "type": "string"
+          },
+          "imagePrompt": {
+            "description": "DESCRIPTION ONLY — renderer chooses real asset.",
+            "type": "string"
+          },
+          "primaryCta": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "call",
+                  "email",
+                  "form"
+                ],
+                "type": "string"
+              },
+              "label": {
+                "maxLength": 32,
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "action"
+            ],
+            "type": "object"
+          },
+          "subheadline": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "type": {
+            "const": "hero"
+          }
+        },
+        "required": [
+          "type",
+          "headline",
+          "subheadline",
+          "primaryCta"
+        ],
+        "type": "object"
+      },
+      "Services": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "oneLine": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "oneLine"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "minItems": 3,
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 60,
+            "type": "string"
+          },
+          "type": {
+            "const": "services"
+          }
+        },
+        "required": [
+          "type",
+          "items"
+        ],
+        "type": "object"
+      },
+      "Trust": {
+        "additionalProperties": false,
+        "properties": {
+          "badges": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "maxLength": 60,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "type": {
+            "const": "trust"
+          }
+        },
+        "required": [
+          "type",
+          "badges"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "brand": {
+        "additionalProperties": false,
+        "properties": {
+          "palette": {
+            "additionalProperties": false,
+            "properties": {
+              "neutralDark": {
+                "type": "string"
+              },
+              "neutralLight": {
+                "type": "string"
+              },
+              "primary": {
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "primary",
+              "neutralDark",
+              "neutralLight"
+            ],
+            "type": "object"
+          },
+          "positioning": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "tone": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "palette",
+          "positioning"
+        ],
+        "type": "object"
+      },
+      "constraints": {
+        "additionalProperties": false,
+        "properties": {
+          "doNotInventAwards": {
+            "const": true
+          },
+          "doNotInventPrices": {
+            "const": true
+          },
+          "doNotInventTestimonials": {
+            "const": true
+          }
+        },
+        "required": [
+          "doNotInventTestimonials",
+          "doNotInventAwards",
+          "doNotInventPrices"
+        ],
+        "type": "object"
+      },
+      "page": {
+        "additionalProperties": false,
+        "properties": {
+          "sections": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Hero"
+                },
+                {
+                  "$ref": "#/$defs/Services"
+                },
+                {
+                  "$ref": "#/$defs/About"
+                },
+                {
+                  "$ref": "#/$defs/Trust"
+                },
+                {
+                  "$ref": "#/$defs/FAQ"
+                },
+                {
+                  "$ref": "#/$defs/CTA"
+                },
+                {
+                  "$ref": "#/$defs/Contact"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 4,
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "type": "object"
+      },
+      "seo": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 160,
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 60,
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "brand",
+      "page",
+      "seo",
+      "constraints"
+    ],
+    "type": "object"
+  },
+  "stage": "spec",
+  "system": "You are a UK small-business website designer producing a single-page redesign spec.\nYou must work strictly from the provided business data. Do not invent facts.\nWrite for the operator's chosen vertical and tone (provided in the style guide).\nOutput is consumed by a renderer that fills fixed components — do not invent components.\n\u003csafety_rules\u003e\n- Never invent business facts you cannot see: testimonials, awards, certifications, prices, or staff names.\n- Never claim that a private preview is published, that the recipient asked for it, or that they have an account with us.\n- Never use the word \"password\" in user-facing copy. Use \"access code\" or \"code\".\n- Never make medical, legal, or financial claims about the business unless the same words appear verbatim in the source data.\n- Never write copy that pressures, fakes urgency, or implies prior contact.\n- If you cannot verify a fact from the provided inputs, omit it. Silence is always safer than fabrication.\n\u003c/safety_rules\u003e",
+  "toolName": "produceSpec"
+}

@@ -87,7 +87,12 @@ func New[T any](p Prompt[T]) Prompt[T] {
 	case p.EstimateUSD <= 0:
 		panic("prompts.New: EstimateUSD must be > 0 (zero defeats cost.Assert)")
 	}
-	p.Schema = schemas.MustJSONSchemaFor[T]()
+	// Pre-populated Schema wins — prompts whose Go type can't be cleanly
+	// reflected (oneOf discriminators, $defs cross-refs, etc.) supply
+	// their own hand-written schema. Otherwise reflect T.
+	if len(p.Schema) == 0 {
+		p.Schema = schemas.MustJSONSchemaFor[T]()
+	}
 	return p
 }
 
