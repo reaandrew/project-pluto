@@ -77,6 +77,16 @@ func Render(in Input) (string, error) {
 		return "", fmt.Errorf("sitebundle: render footer: %w", err)
 	}
 
+	// nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type
+	//
+	// The strings we wrap as template.HTML here are NOT user-controlled
+	// at this boundary — each one came out of a sibling `html/template`
+	// pipeline (components.RenderSection / components.RenderFooter)
+	// which has already escaped every user-supplied field (Headline,
+	// Paragraph, badge labels, etc.). Re-escaping here would
+	// double-encode the per-section markup and corrupt the page. The
+	// pattern is "compose pre-escaped fragments into a wrapper
+	// template", not "splat raw user input into a template".
 	tplData := documentData{
 		Lang:              "en",
 		Title:             in.Spec.SEO.Title,
