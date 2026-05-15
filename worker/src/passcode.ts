@@ -22,9 +22,26 @@
 // HMAC-SHA256 signed cookie scoped to /sites/<websiteId>/, ` Secure; HttpOnly;
 // SameSite=Lax`, 24h TTL. Body is `<websiteId>.<exp_unix>.<sig_hex>`. Validation
 // recomputes the HMAC and constant-time-compares; rejects if expired.
+//
+// OPERATOR BYPASS TOKEN (iter 5.5)
+// -------------------------------
+// The screenshot job (lambdas/screenshotter) points the Cloudflare Browser
+// Rendering headless browser at `/sites/<id>/?op=<token>` so it can render the
+// preview without solving the passcode form. The token is
+// `<websiteId>.<exp_unix>.<sig_hex>` with `sig = HMAC-SHA256(salt,
+// "op:<websiteId>.<exp>")`. The `op:` payload prefix domain-separates it from
+// the cookie signature (`<websiteId>.<exp>`, no prefix) so neither can be
+// replayed as the other. "One-time" is implemented as a tight TTL
+// (OP_TOKEN_TTL_SECONDS) rather than a KV-consumed nonce: the token is minted
+// server-side immediately before the Browser Rendering call, travels only
+// Lambda→Cloudflare over HTTPS, is never logged or persisted, and a 120s
+// window makes replay impractical while keeping the Worker stateless. The Go
+// signer in lambdas/pkg/passcode must stay byte-cross-pinned with signOpToken
+// (test vector pinned on both sides).
 
 export const COOKIE_NAME = "preview_session";
 const COOKIE_TTL_SECONDS = 24 * 60 * 60;
+const OP_TOKEN_TTL_SECONDS = 120;
 
 const enc = new TextEncoder();
 
@@ -67,6 +84,25 @@ export async function verifyCookie(cookieHeader: string, websiteId: string, salt
   const exp = Number(expStr);
   if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return false;
   const expectedSig = await hmacHex(salt, `${cookieWebsiteId}.${exp}`);
+  return constantTimeEqual(sigHex, expectedSig);
+}
+
+// ---------- operator bypass token ----------
+
+export async function signOpToken(websiteId: string, salt: string): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + OP_TOKEN_TTL_SECONDS;
+  const sig = await hmacHex(salt, `op:${websiteId}.${exp}`);
+  return `${websiteId}.${exp}.${sig}`;
+}
+
+export async function verifyOpToken(token: string, websiteId: string, salt: string): Promise<boolean> {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  const [tokenWebsiteId, expStr, sigHex] = parts;
+  if (tokenWebsiteId !== websiteId) return false;
+  const exp = Number(expStr);
+  if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return false;
+  const expectedSig = await hmacHex(salt, `op:${tokenWebsiteId}.${exp}`);
   return constantTimeEqual(sigHex, expectedSig);
 }
 

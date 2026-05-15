@@ -3,7 +3,7 @@
 // Routes:
 //   GET  /sites/{websiteId}                — landing; cookie OR ?p=<passcode>; passcode form on miss
 //   POST /sites/{websiteId}                — passcode form submit
-//   GET  /sites/{websiteId}/<asset path>   — same passcode rule
+//   GET  /sites/{websiteId}/<asset path>   — same passcode rule, OR ?op=<token>
 //   GET  /screenshots/{websiteId}/{size}.png — same passcode rule
 //   GET  /healthz                          — always 200
 //
@@ -14,11 +14,15 @@
 //     This iter (0.D) ships a SHA-256-with-salt validator as scaffolding; iter 5.4
 //     swaps in argon2id (see passcode.ts TODO).
 //   - On success, set a HMAC-SHA256-signed cookie scoped to /sites/<websiteId>/.
+//   - Operator bypass (iter 5.5): a short-lived `?op=<token>` signed by the
+//     screenshot Lambda lets the Browser Rendering headless browser render the
+//     preview without the passcode form. Still subject to revocation. See
+//     passcode.ts § OPERATOR BYPASS TOKEN.
 //
 // Rate limiting is at the Cloudflare zone level (terraform-managed ruleset),
 // not in Worker code. The Worker assumes hot requests have already been blocked.
 
-import { validatePasscode, signCookie, verifyCookie, COOKIE_NAME } from "./passcode";
+import { validatePasscode, signCookie, verifyCookie, verifyOpToken, COOKIE_NAME } from "./passcode";
 
 export interface Env {
   PREVIEWS: R2Bucket;
@@ -76,8 +80,23 @@ async function serveAsset(
   websiteId: string,
   assetPath: string,
 ): Promise<Response> {
+  const url = new URL(request.url);
   const cookie = request.headers.get("cookie") ?? "";
-  const queryPasscode = new URL(request.url).searchParams.get("p");
+  const queryPasscode = url.searchParams.get("p");
+  const opToken = url.searchParams.get("op");
+
+  // Operator bypass: a valid short-lived ?op= token (minted by the screenshot
+  // Lambda) renders the preview for the headless browser without the passcode
+  // form. We also set the normal signed cookie so any same-origin sub-resource
+  // fetches the browser makes authenticate too (the current sitebundle is
+  // self-contained, but the cookie future-proofs split assets). Still gated on
+  // revocation so the bypass can't outlive a revoked preview.
+  if (opToken && (await verifyOpToken(opToken, websiteId, env.PASSCODE_SALT))) {
+    if (!(await passcodeStillIssued(env, websiteId))) {
+      return passcodeFormResponse(websiteId, "This preview has been revoked.");
+    }
+    return serveStoredAsset(env, websiteId, assetPath, await signCookie(websiteId, env.PASSCODE_SALT));
+  }
 
   const cookieValid = await verifyCookie(cookie, websiteId, env.PASSCODE_SALT);
   if (!cookieValid) {
@@ -109,6 +128,18 @@ async function serveAsset(
     return passcodeFormResponse(websiteId, "This preview has been revoked.");
   }
 
+  return serveStoredAsset(env, websiteId, assetPath);
+}
+
+// serveStoredAsset fetches the preview document/asset from R2 and returns it.
+// Callers must have already authorized the request (valid cookie, valid ?p=,
+// or valid ?op= token) and confirmed the passcode is still issued.
+async function serveStoredAsset(
+  env: Env,
+  websiteId: string,
+  assetPath: string,
+  setCookie?: string,
+): Promise<Response> {
   const objectKey = assetPath ? `sites/${websiteId}/${assetPath}` : `sites/${websiteId}/index.html`;
   const obj = await env.PREVIEWS.get(objectKey);
   if (!obj) {
@@ -119,6 +150,7 @@ async function serveAsset(
   obj.writeHttpMetadata(headers);
   headers.set("etag", obj.httpEtag);
   headers.set("cache-control", "private, max-age=300");
+  if (setCookie) headers.set("set-cookie", setCookie);
   return new Response(obj.body, { headers });
 }
 

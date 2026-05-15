@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { hashPasscode, validatePasscode, signCookie, verifyCookie, COOKIE_NAME } from "../src/passcode";
+import {
+  hashPasscode,
+  validatePasscode,
+  signCookie,
+  verifyCookie,
+  signOpToken,
+  verifyOpToken,
+  COOKIE_NAME,
+} from "../src/passcode";
 import worker from "../src/index";
 
 const SALT = "test-salt-not-real";
@@ -65,6 +73,110 @@ describe("signed cookie", () => {
   it("returns false on missing cookie", async () => {
     expect(await verifyCookie("", "site-abc", SALT)).toBe(false);
     expect(await verifyCookie("other=value", "site-abc", SALT)).toBe(false);
+  });
+});
+
+describe("operator bypass token (iter 5.5)", () => {
+  it("round-trips a valid token", async () => {
+    const token = await signOpToken("site-op", SALT);
+    expect(token.split(".")).toHaveLength(3);
+    expect(token.startsWith("site-op.")).toBe(true);
+    expect(await verifyOpToken(token, "site-op", SALT)).toBe(true);
+  });
+
+  it("rejects a token bound to a different websiteId", async () => {
+    const token = await signOpToken("site-op", SALT);
+    expect(await verifyOpToken(token, "site-other", SALT)).toBe(false);
+  });
+
+  it("rejects a token signed with a different salt", async () => {
+    const token = await signOpToken("site-op", SALT);
+    expect(await verifyOpToken(token, "site-op", "different-salt")).toBe(false);
+  });
+
+  it("rejects a tampered signature", async () => {
+    const token = await signOpToken("site-op", SALT);
+    const tampered = token.replace(/.$/, (c) => (c === "0" ? "1" : "0"));
+    expect(await verifyOpToken(tampered, "site-op", SALT)).toBe(false);
+  });
+
+  it("rejects an expired token", async () => {
+    // exp in the past; signature is irrelevant because expiry is checked first.
+    expect(await verifyOpToken("site-op.1000.deadbeef", "site-op", SALT)).toBe(false);
+  });
+
+  it("rejects malformed tokens", async () => {
+    expect(await verifyOpToken("", "site-op", SALT)).toBe(false);
+    expect(await verifyOpToken("a.b", "site-op", SALT)).toBe(false);
+    expect(await verifyOpToken("a.b.c.d", "site-op", SALT)).toBe(false);
+  });
+
+  it("an op-token signature is not accepted as a cookie (domain separation)", async () => {
+    const token = await signOpToken("site-op", SALT);
+    // Feed the op-token body in as if it were the cookie value.
+    expect(await verifyCookie(`${COOKIE_NAME}=${token}`, "site-op", SALT)).toBe(false);
+  });
+});
+
+describe("operator bypass — /sites routing (iter 5.5)", () => {
+  function envWithR2AndKV(kvValue: string | null) {
+    return {
+      PASSCODE_SALT: SALT,
+      ENVIRONMENT: "test",
+      PREVIEWS: {
+        get: async (key: string) =>
+          key === "sites/site-op/index.html"
+            ? {
+                body: "<!doctype html><title>preview</title>",
+                httpEtag: '"abc"',
+                writeHttpMetadata: (h: Headers) => h.set("content-type", "text/html"),
+              }
+            : null,
+      } as unknown as R2Bucket,
+      PREVIEW_PASSCODES_KV: {
+        get: async () => kvValue,
+      } as unknown as KVNamespace,
+    };
+  }
+
+  it("valid ?op= serves the R2 document and sets the session cookie", async () => {
+    resetRevocationCacheForTests();
+    const env = envWithR2AndKV("some-hash");
+    const token = await signOpToken("site-op", SALT);
+    const res = await worker.fetch(
+      new Request(`https://example.test/sites/site-op/?op=${encodeURIComponent(token)}`),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("preview");
+    expect(res.headers.get("set-cookie")).toContain(`${COOKIE_NAME}=`);
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+
+  it("invalid ?op= falls through to the passcode form", async () => {
+    resetRevocationCacheForTests();
+    const env = envWithR2AndKV("some-hash");
+    const res = await worker.fetch(
+      new Request("https://example.test/sites/site-op/?op=site-op.9999999999.bad"),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("This preview is private");
+  });
+
+  it("valid ?op= but revoked KV → revoked form, not content", async () => {
+    resetRevocationCacheForTests();
+    const env = envWithR2AndKV(null); // revoked
+    const token = await signOpToken("site-op", SALT);
+    const res = await worker.fetch(
+      new Request(`https://example.test/sites/site-op/?op=${encodeURIComponent(token)}`),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("This preview has been revoked.");
   });
 });
 
