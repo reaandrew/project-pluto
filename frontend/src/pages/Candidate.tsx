@@ -10,6 +10,7 @@ import {
   regenerateSite,
   rejectSpec,
   rejectWebsite,
+  revealPasscode,
   type CandidateResponse,
   type Spec,
   type SpecV1Content,
@@ -43,6 +44,8 @@ export default function Candidate() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [website, setWebsite] = useState<WebsiteView | null>(null);
+  // Revealed cleartext lives only in component memory (never persisted).
+  const [revealedPasscode, setRevealedPasscode] = useState<string | undefined>();
   const [webBusy, setWebBusy] = useState<
     'idle' | 'approving' | 'rejecting' | 'regen-site' | 'regen-code'
   >('idle');
@@ -91,6 +94,7 @@ export default function Candidate() {
     setWebError(null);
     try {
       setWebsite(await approveWebsite(businessId, website.id, notes || undefined));
+      setRevealedPasscode(undefined); // wipe cleartext on any state change
       setNotes('');
     } catch (e) {
       setWebError((e as Error).message);
@@ -105,6 +109,7 @@ export default function Candidate() {
     setWebError(null);
     try {
       setWebsite(await rejectWebsite(businessId, website.id, notes || undefined));
+      setRevealedPasscode(undefined); // wipe cleartext on any state change
       setNotes('');
     } catch (e) {
       setWebError((e as Error).message);
@@ -182,6 +187,7 @@ export default function Candidate() {
     setWebError(null);
     try {
       setWebsite(await regenerateSite(businessId, website.id, notes || undefined));
+      setRevealedPasscode(undefined); // wipe cleartext on any state change
       setNotes('');
     } catch (e) {
       setWebError((e as Error).message);
@@ -196,10 +202,21 @@ export default function Candidate() {
     setWebError(null);
     try {
       setWebsite(await regeneratePasscode(businessId, website.id, notes || undefined));
+      setRevealedPasscode(undefined); // old cleartext is now invalid
     } catch (e) {
       setWebError((e as Error).message);
     } finally {
       setWebBusy('idle');
+    }
+  }
+
+  async function onRevealPasscode() {
+    if (!businessId || !website) return;
+    setWebError(null);
+    try {
+      setRevealedPasscode(await revealPasscode(businessId, website.id));
+    } catch (e) {
+      setWebError((e as Error).message);
     }
   }
 
@@ -356,7 +373,10 @@ export default function Candidate() {
                   ? new Date(website.passcodeRevealableUntil * 1000)
                   : null
               }
+              passcode={revealedPasscode}
               onCopyUrl={(u) => void navigator.clipboard?.writeText(u)}
+              onCopyCode={(c) => void navigator.clipboard?.writeText(c)}
+              onReveal={() => void onRevealPasscode()}
               onRegenerateCode={() => void onRegeneratePasscode()}
             />
             {website.screenshots && (

@@ -70,6 +70,51 @@ describe('AccessStrip', () => {
     expect(screen.getByRole('button', { name: 'Regenerate code' })).toBeInTheDocument();
   });
 
+  it('shows "Reveal code" when the window is open and nothing revealed yet', () => {
+    const onReveal = vi.fn();
+    render(
+      <AccessStrip
+        previewUrl="https://previews.example.com/sites/x"
+        cleartextRevealableUntil={new Date(Date.now() + 24 * 60 * 60 * 1000)}
+        onReveal={onReveal}
+      />
+    );
+    expect(screen.getByLabelText('passcode').textContent).toBe('Code hidden');
+    expect(screen.queryByRole('button', { name: 'Copy code' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal code' }));
+    expect(onReveal).toHaveBeenCalled();
+  });
+
+  it('once the parent supplies the revealed passcode, Reveal is gone and Show/Copy work', () => {
+    const onCopyCode = vi.fn();
+    render(
+      <AccessStrip
+        previewUrl="https://previews.example.com/sites/x"
+        passcode="REVEALED1"
+        cleartextRevealableUntil={new Date(Date.now() + 24 * 60 * 60 * 1000)}
+        onReveal={vi.fn()}
+        onCopyCode={onCopyCode}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Reveal code' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(screen.getByLabelText('passcode').textContent).toBe('REVEALED1');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+    expect(onCopyCode).toHaveBeenCalledWith('REVEALED1');
+  });
+
+  it('no "Reveal code" once the cleartext window has passed', () => {
+    render(
+      <AccessStrip
+        previewUrl="https://previews.example.com/sites/x"
+        cleartextRevealableUntil={new Date(Date.now() - 60 * 1000)}
+        onReveal={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Reveal code' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('passcode').textContent).toContain('Code wiped');
+  });
+
   it('fires onRegenerateCode', () => {
     const onRegenerateCode = vi.fn();
     render(

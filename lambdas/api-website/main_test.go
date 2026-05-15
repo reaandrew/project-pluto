@@ -474,6 +474,128 @@ func TestHandle_RegeneratePasscode_404WhenMissing(t *testing.T) {
 	}
 }
 
+// --- iter 6.3: reveal-passcode ----------------------------------------
+
+func revealOps(decrypted string, decErr error) func(context.Context) (*passcodeOps, error) {
+	return func(context.Context) (*passcodeOps, error) {
+		return &passcodeOps{
+			Decrypt: func(_ context.Context, _ string) (string, error) {
+				if decErr != nil {
+					return "", decErr
+				}
+				return decrypted, nil
+			},
+		}, nil
+	}
+}
+
+func TestHandle_RevealPasscode_HappyPath(t *testing.T) {
+	d, eb := setup(t)
+	seedBusiness(d)
+	seedWebsite(d, "published") // PasscodeCipher set, revealableUntil in the future
+	passcodeOpsProvider = revealOps("CLEAR123", nil)
+	t.Cleanup(func() { passcodeOpsProvider = defaultPasscodeOps })
+
+	req := makeReq("POST", "/candidates/biz-1/website/web-1/reveal-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "web-1"})
+	resp, err := handle(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d, want 200 (%s)", resp.StatusCode, resp.Body)
+	}
+	// The response body is the ONE sanctioned cleartext channel.
+	var got revealResponse
+	if err := json.Unmarshal([]byte(resp.Body), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Passcode != "CLEAR123" {
+		t.Errorf("revealed passcode = %q, want CLEAR123", got.Passcode)
+	}
+	// Cleartext must NOT have leaked into any event or DDB row.
+	for _, p := range eb.puts {
+		for _, e := range p.Entries {
+			if strings.Contains(*e.Detail, "CLEAR123") {
+				t.Fatalf("cleartext leaked into an event: %s", *e.Detail)
+			}
+		}
+	}
+	for k, item := range d.items {
+		for attr, av := range item {
+			if s, ok := av.(*dtypes.AttributeValueMemberS); ok && strings.Contains(s.Value, "CLEAR123") {
+				t.Fatalf("cleartext leaked into DDB %s.%s: %s", k, attr, s.Value)
+			}
+		}
+	}
+}
+
+func TestHandle_RevealPasscode_404WhenMissing(t *testing.T) {
+	d, _ := setup(t)
+	seedBusiness(d)
+	req := makeReq("POST", "/candidates/biz-1/website/nope/reveal-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "nope"})
+	resp, _ := handle(context.Background(), req)
+	if resp.StatusCode != 404 {
+		t.Errorf("StatusCode = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestHandle_RevealPasscode_409WhenCipherWiped(t *testing.T) {
+	d, _ := setup(t)
+	seedBusiness(d)
+	seedWebsite(d, "published")
+	// Wipe the cipher on the seeded row.
+	row := d.items[keyOf("BUSINESS#biz-1", "WEBSITE#web-1")]
+	delete(row, "passcodeCipher")
+	passcodeOpsProvider = revealOps("SHOULD_NOT_BE_CALLED", nil)
+	t.Cleanup(func() { passcodeOpsProvider = defaultPasscodeOps })
+
+	req := makeReq("POST", "/candidates/biz-1/website/web-1/reveal-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "web-1"})
+	resp, _ := handle(context.Background(), req)
+	if resp.StatusCode != 409 {
+		t.Errorf("StatusCode = %d, want 409 (cipher wiped)", resp.StatusCode)
+	}
+}
+
+func TestHandle_RevealPasscode_409WhenRevoked(t *testing.T) {
+	d, _ := setup(t)
+	seedBusiness(d)
+	seedWebsite(d, "published")
+	row := d.items[keyOf("BUSINESS#biz-1", "WEBSITE#web-1")]
+	row["passcodeRevokedAt"] = &dtypes.AttributeValueMemberS{Value: "2026-05-15T12:00:00Z"}
+	passcodeOpsProvider = revealOps("SHOULD_NOT_BE_CALLED", nil)
+	t.Cleanup(func() { passcodeOpsProvider = defaultPasscodeOps })
+
+	req := makeReq("POST", "/candidates/biz-1/website/web-1/reveal-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "web-1"})
+	resp, _ := handle(context.Background(), req)
+	if resp.StatusCode != 409 {
+		t.Errorf("StatusCode = %d, want 409 (revoked)", resp.StatusCode)
+	}
+	if strings.Contains(resp.Body, "SHOULD_NOT_BE_CALLED") {
+		t.Fatal("Decrypt must not be called when the passcode is revoked")
+	}
+}
+
+func TestHandle_RevealPasscode_409WhenExpired(t *testing.T) {
+	d, _ := setup(t)
+	seedBusiness(d)
+	seedWebsite(d, "published")
+	row := d.items[keyOf("BUSINESS#biz-1", "WEBSITE#web-1")]
+	row["passcodeRevealableUntil"] = &dtypes.AttributeValueMemberN{Value: "1000"} // 1970
+	passcodeOpsProvider = revealOps("SHOULD_NOT_BE_CALLED", nil)
+	t.Cleanup(func() { passcodeOpsProvider = defaultPasscodeOps })
+
+	req := makeReq("POST", "/candidates/biz-1/website/web-1/reveal-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "web-1"})
+	resp, _ := handle(context.Background(), req)
+	if resp.StatusCode != 409 {
+		t.Errorf("StatusCode = %d, want 409 (window expired)", resp.StatusCode)
+	}
+}
+
 func TestHandle_405Default(t *testing.T) {
 	setup(t)
 	req := makeReq("DELETE", "/candidates/biz-1/website/web-1", "",
