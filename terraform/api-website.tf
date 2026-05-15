@@ -39,6 +39,15 @@ resource "aws_lambda_function" "api_website" {
       ENVIRONMENT    = var.environment
       LOG_LEVEL      = local.is_production ? "INFO" : "DEBUG"
       EVENT_BUS_NAME = aws_cloudwatch_event_bus.pipeline.name
+      # iter 5.6b regenerate-passcode — same passcode/KMS/KV wiring as
+      # the publisher (iter 5.3); reuses publisher.tf's SSM data sources
+      # + the passcode CMK. The shared lambda_api role already has
+      # kms:Encrypt via the key policy in terraform/kms.tf.
+      PASSCODE_KMS_KEY_ID        = aws_kms_alias.passcode_cleartext.target_key_arn
+      PASSCODE_SALT              = nonsensitive(data.aws_ssm_parameter.passcode_salt.value)
+      CLOUDFLARE_ACCOUNT_ID      = nonsensitive(data.aws_ssm_parameter.cloudflare_account_id.value)
+      CLOUDFLARE_KV_NAMESPACE_ID = nonsensitive(data.aws_ssm_parameter.cloudflare_kv_namespace_id.value)
+      CLOUDFLARE_API_TOKEN       = nonsensitive(data.aws_ssm_parameter.cloudflare_api_token.value)
     }
   }
 
@@ -81,6 +90,22 @@ resource "aws_apigatewayv2_route" "candidate_website_approve" {
 resource "aws_apigatewayv2_route" "candidate_website_reject" {
   api_id             = aws_apigatewayv2_api.main.id
   route_key          = "POST /candidates/{businessId}/website/{websiteId}/reject"
+  target             = "integrations/${aws_apigatewayv2_integration.api_website.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "candidate_website_regenerate_site" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /candidates/{businessId}/website/{websiteId}/regenerate-site"
+  target             = "integrations/${aws_apigatewayv2_integration.api_website.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "candidate_website_regenerate_passcode" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /candidates/{businessId}/website/{websiteId}/regenerate-passcode"
   target             = "integrations/${aws_apigatewayv2_integration.api_website.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

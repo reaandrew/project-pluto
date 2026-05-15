@@ -6,6 +6,8 @@ import {
   getCandidate,
   getCandidateWebsite,
   patchSpec,
+  regeneratePasscode,
+  regenerateSite,
   rejectSpec,
   rejectWebsite,
   type CandidateResponse,
@@ -41,7 +43,9 @@ export default function Candidate() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [website, setWebsite] = useState<WebsiteView | null>(null);
-  const [webBusy, setWebBusy] = useState<'idle' | 'approving' | 'rejecting'>('idle');
+  const [webBusy, setWebBusy] = useState<
+    'idle' | 'approving' | 'rejecting' | 'regen-site' | 'regen-code'
+  >('idle');
   const [webError, setWebError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -169,6 +173,33 @@ export default function Candidate() {
       setError((e as Error).message);
     } finally {
       setBusy('idle');
+    }
+  }
+
+  async function onRegenerateSite() {
+    if (!businessId || !website) return;
+    setWebBusy('regen-site');
+    setWebError(null);
+    try {
+      setWebsite(await regenerateSite(businessId, website.id, notes || undefined));
+      setNotes('');
+    } catch (e) {
+      setWebError((e as Error).message);
+    } finally {
+      setWebBusy('idle');
+    }
+  }
+
+  async function onRegeneratePasscode() {
+    if (!businessId || !website) return;
+    setWebBusy('regen-code');
+    setWebError(null);
+    try {
+      setWebsite(await regeneratePasscode(businessId, website.id, notes || undefined));
+    } catch (e) {
+      setWebError((e as Error).message);
+    } finally {
+      setWebBusy('idle');
     }
   }
 
@@ -326,6 +357,7 @@ export default function Candidate() {
                   : null
               }
               onCopyUrl={(u) => void navigator.clipboard?.writeText(u)}
+              onRegenerateCode={() => void onRegeneratePasscode()}
             />
             {website.screenshots && (
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
@@ -353,6 +385,9 @@ export default function Candidate() {
                 disabled={webBusy !== 'idle' || website.status !== 'published'}
               >
                 {webBusy === 'rejecting' ? 'Rejecting…' : 'Reject preview'}
+              </button>
+              <button onClick={onRegenerateSite} disabled={webBusy !== 'idle'}>
+                {webBusy === 'regen-site' ? 'Regenerating…' : 'Regenerate site'}
               </button>
               {website.status !== 'published' && (
                 <span style={{ marginLeft: 'auto', color: '#666', fontSize: '0.85rem' }}>

@@ -322,6 +322,158 @@ func TestHandle_Decision_404WhenWebsiteMissing(t *testing.T) {
 	}
 }
 
+// --- iter 5.6b: regenerate-site ---------------------------------------
+
+func TestHandle_RegenerateSite_HappyPath(t *testing.T) {
+	d, eb := setup(t)
+	seedBusiness(d)
+	seedWebsite(d, "approved")
+	req := makeReq("POST", "/candidates/biz-1/website/web-1/regenerate-site",
+		`{"notes":"swap the hero"}`,
+		map[string]string{"businessId": "biz-1", "websiteId": "web-1"})
+	resp, err := handle(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d, want 200 (%s)", resp.StatusCode, resp.Body)
+	}
+	var view websiteView
+	_ = json.Unmarshal([]byte(resp.Body), &view)
+	if view.Status != "regenerated" {
+		t.Errorf("status = %q, want regenerated", view.Status)
+	}
+	var sawRegen, sawFeedback bool
+	for _, p := range eb.puts {
+		for _, e := range p.Entries {
+			switch *e.DetailType {
+			case "website.regenerate.requested":
+				sawRegen = true
+				if !strings.Contains(*e.Detail, `"specId":"spec-1"`) || !strings.Contains(*e.Detail, `"websiteId":"web-1"`) {
+					t.Errorf("regenerate event missing specId/websiteId: %s", *e.Detail)
+				}
+			case "feedback.captured":
+				sawFeedback = true
+			}
+		}
+	}
+	if !sawRegen || !sawFeedback {
+		t.Errorf("expected website.regenerate.requested + feedback.captured; regen=%v fb=%v", sawRegen, sawFeedback)
+	}
+	// Sanitisation: no passcode material on the regenerate-site path.
+	for _, p := range eb.puts {
+		for _, e := range p.Entries {
+			if strings.Contains(*e.Detail, "SECRET_HASH") || strings.Contains(*e.Detail, "SECRET_CIPHER") {
+				t.Fatalf("passcode material leaked into a regenerate-site event: %s", *e.Detail)
+			}
+		}
+	}
+	for k, item := range d.items {
+		if strings.HasPrefix(k, "FEEDBACK#") {
+			if op, ok := item["originalPayload"].(*dtypes.AttributeValueMemberS); ok &&
+				(strings.Contains(op.Value, "SECRET_HASH") || strings.Contains(op.Value, "SECRET_CIPHER")) {
+				t.Fatalf("passcode material leaked into the regenerate-site feedback row: %s", op.Value)
+			}
+		}
+	}
+}
+
+func TestHandle_RegenerateSite_404WhenMissing(t *testing.T) {
+	d, _ := setup(t)
+	seedBusiness(d)
+	req := makeReq("POST", "/candidates/biz-1/website/nope/regenerate-site", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "nope"})
+	resp, _ := handle(context.Background(), req)
+	if resp.StatusCode != 404 {
+		t.Errorf("StatusCode = %d, want 404", resp.StatusCode)
+	}
+}
+
+// --- iter 5.6b: regenerate-passcode -----------------------------------
+
+func TestHandle_RegeneratePasscode_HappyPath(t *testing.T) {
+	d, eb := setup(t)
+	seedBusiness(d)
+	seedWebsite(d, "published")
+
+	var kvKey, kvVal string
+	passcodeOpsProvider = func(context.Context) (*passcodeOps, error) {
+		return &passcodeOps{
+			Gen: func() (string, error) { return "NEWCODE9", nil },
+			// Realistic doubles: a real hash/cipher never contains the
+			// cleartext, so the leak-sweep below is meaningful.
+			Hash: func(_, _ string) string { return "h4sh3dvalue" },
+			Encrypt: func(_ context.Context, _ string) (string, error) {
+				return "c1ph3rtext", nil
+			},
+			KVPut: func(_ context.Context, key, value string, _ map[string]string) error {
+				kvKey, kvVal = key, value
+				return nil
+			},
+			Salt: "test-salt",
+		}, nil
+	}
+	t.Cleanup(func() { passcodeOpsProvider = defaultPasscodeOps })
+
+	req := makeReq("POST", "/candidates/biz-1/website/web-1/regenerate-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "web-1"})
+	resp, err := handle(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d, want 200 (%s)", resp.StatusCode, resp.Body)
+	}
+	// Old KV key overwritten with the NEW hash → old cleartext invalid.
+	if kvKey != "passcode:web-1" || kvVal != "h4sh3dvalue" {
+		t.Errorf("KV overwrite drift: key=%q val=%q", kvKey, kvVal)
+	}
+	// Cleartext must not appear anywhere observable.
+	if strings.Contains(resp.Body, "NEWCODE9") {
+		t.Fatalf("cleartext leaked in response: %s", resp.Body)
+	}
+	for _, p := range eb.puts {
+		for _, e := range p.Entries {
+			if strings.Contains(*e.Detail, "NEWCODE9") {
+				t.Fatalf("cleartext leaked in event: %s", *e.Detail)
+			}
+		}
+	}
+	for k, item := range d.items {
+		if strings.HasPrefix(k, "FEEDBACK#") {
+			if op, ok := item["originalPayload"].(*dtypes.AttributeValueMemberS); ok && strings.Contains(op.Value, "NEWCODE9") {
+				t.Fatalf("cleartext leaked in feedback row: %s", op.Value)
+			}
+		}
+	}
+	// Website row got the new sealed material + cleared revocation.
+	row := d.items[keyOf("BUSINESS#biz-1", "WEBSITE#web-1")]
+	if row["passcodeHash"].(*dtypes.AttributeValueMemberS).Value != "h4sh3dvalue" {
+		t.Errorf("passcodeHash not rotated")
+	}
+	if row["passcodeCipher"].(*dtypes.AttributeValueMemberS).Value != "c1ph3rtext" {
+		t.Errorf("passcodeCipher not rotated")
+	}
+	// Defence-in-depth: no attribute on the persisted Website row may
+	// contain the raw cleartext.
+	for attr, av := range row {
+		if s, ok := av.(*dtypes.AttributeValueMemberS); ok && strings.Contains(s.Value, "NEWCODE9") {
+			t.Fatalf("cleartext leaked into Website row attribute %q: %s", attr, s.Value)
+		}
+	}
+}
+
+func TestHandle_RegeneratePasscode_404WhenMissing(t *testing.T) {
+	d, _ := setup(t)
+	seedBusiness(d)
+	req := makeReq("POST", "/candidates/biz-1/website/nope/regenerate-passcode", "",
+		map[string]string{"businessId": "biz-1", "websiteId": "nope"})
+	resp, _ := handle(context.Background(), req)
+	if resp.StatusCode != 404 {
+		t.Errorf("StatusCode = %d, want 404", resp.StatusCode)
+	}
+}
+
 func TestHandle_405Default(t *testing.T) {
 	setup(t)
 	req := makeReq("DELETE", "/candidates/biz-1/website/web-1", "",

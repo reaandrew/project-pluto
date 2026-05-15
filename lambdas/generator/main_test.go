@@ -324,3 +324,30 @@ func makeSQSRecord(t *testing.T, env pkgevents.Envelope[SpecApprovedDetail]) lam
 	}
 	return lambdaevents.SQSMessage{MessageId: env.EventID, Body: string(raw)}
 }
+
+// --- iter 5.6b: regenerate reuses the existing websiteId ---------------
+
+func TestRunOne_RegenerateReusesWebsiteID(t *testing.T) {
+	setupItemsTable(t)
+	c := &captured{}
+	d := newDeps(t, c, validBiz(), validSpec("approved"))
+	// website.regenerate.requested carries the existing websiteId.
+	env := pkgevents.New("website.regenerate.requested", "api-website", SpecApprovedDetail{
+		BusinessID: "biz-1", SpecID: "spec-1", WebsiteID: "existing-web",
+	})
+	if err := processRecord(context.Background(), d, env); err != nil {
+		t.Fatalf("processRecord: %v", err)
+	}
+	if c.websiteRow.ID != "existing-web" {
+		t.Errorf("regenerate must reuse websiteId, got %q (NewWebsiteID would be website-1)", c.websiteRow.ID)
+	}
+	if c.putKey != "generated/existing-web/index.html" {
+		t.Errorf("S3 key must use the reused websiteId: %q", c.putKey)
+	}
+	if c.websiteRow.SK != "WEBSITE#existing-web" || c.websiteRow.Status != "generated" {
+		t.Errorf("row drift on regenerate: %+v", c.websiteRow)
+	}
+	if c.published.Detail.WebsiteID != "existing-web" {
+		t.Errorf("website.generated must carry the reused id: %q", c.published.Detail.WebsiteID)
+	}
+}

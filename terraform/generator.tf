@@ -79,7 +79,10 @@ resource "aws_sqs_queue_policy" "generator_main" {
       Resource  = aws_sqs_queue.generator_main.arn
       Condition = {
         ArnEquals = {
-          "aws:SourceArn" = aws_cloudwatch_event_rule.spec_approved.arn
+          "aws:SourceArn" = [
+            aws_cloudwatch_event_rule.spec_approved.arn,
+            aws_cloudwatch_event_rule.website_regenerate_requested.arn,
+          ]
         }
       }
     }]
@@ -103,6 +106,42 @@ resource "aws_cloudwatch_event_target" "spec_approved_to_generator" {
   rule           = aws_cloudwatch_event_rule.spec_approved.name
   event_bus_name = aws_cloudwatch_event_bus.pipeline.name
   target_id      = "generator-sqs"
+  arn            = aws_sqs_queue.generator_main.arn
+
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 3
+  }
+
+  dead_letter_config {
+    arn = aws_sqs_queue.dlq["generator"].arn
+  }
+}
+
+# iter 5.6b — operator-triggered re-render. api-website emits
+# website.regenerate.requested {businessId, specId, websiteId}; the
+# generator re-renders the existing approved Spec (no Bedrock) onto the
+# same websiteId so the publisher overwrites the R2 prefix + KV key,
+# invalidating the old passcode and issuing a fresh one.
+resource "aws_cloudwatch_event_rule" "website_regenerate_requested" {
+  # Acronymised per terraform/NAMING.md (web=website, regen=regenerate,
+  # gen=generator). Base 18 chars + ≤25 suffix ≤ 63 < 64 (pitfall #8).
+  name           = "web-regen-to-gen${local.env_suffix}"
+  description    = "Route website.regenerate.requested events to the generator Lambda"
+  event_bus_name = aws_cloudwatch_event_bus.pipeline.name
+
+  event_pattern = jsonencode({
+    source        = ["agency.pipeline"]
+    "detail-type" = ["website.regenerate.requested"]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_event_target" "website_regenerate_to_generator" {
+  rule           = aws_cloudwatch_event_rule.website_regenerate_requested.name
+  event_bus_name = aws_cloudwatch_event_bus.pipeline.name
+  target_id      = "gen-sqs-regen"
   arn            = aws_sqs_queue.generator_main.arn
 
   retry_policy {
