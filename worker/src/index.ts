@@ -56,7 +56,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     return serveAsset(request, env, websiteId, assetPath);
   }
 
-  const screenshotMatch = /^\/screenshots\/([a-z0-9_-]+)\/(thumb|small|medium|large)\.png$/.exec(path);
+  // `desktop` / `mobile` are the sizes the screenshotter Lambda (iter 5.5)
+  // actually writes per 02-data-model.md § Website.screenshots; the legacy
+  // thumb/small/medium/large names from 0.D.2 are kept for compatibility.
+  const screenshotMatch =
+    /^\/screenshots\/([a-z0-9_-]+)\/(thumb|small|medium|large|desktop|mobile)\.png$/.exec(path);
   if (screenshotMatch) {
     return serveScreenshot(request, env, screenshotMatch[1], screenshotMatch[2]);
   }

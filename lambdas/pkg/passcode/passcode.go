@@ -22,6 +22,12 @@
 //     the Cloudflare REST API. Used by the publisher Lambda; the Worker
 //     reads from the same key to validate submitted passcodes.
 //
+//  5. SignOpToken: a short-lived operator-bypass token the screenshotter
+//     Lambda (iter 5.5) appends as `?op=<token>` so the Cloudflare
+//     Browser Rendering headless browser can fetch the preview past the
+//     passcode gate. Byte-cross-pinned with worker/src/passcode.ts
+//     signOpToken (test vector pinned on both sides).
+//
 // **Cleartext NEVER appears in events, logs, or X-Ray traces.** The only
 // place cleartext is allowed to live is the KMS-encrypted `passcodeCipher`
 // field, the prompt body the email-draft Lambda passes to Bedrock for that
@@ -29,12 +35,14 @@
 package passcode
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"time"
 )
 
 // CrockfordBase32Alphabet is the canonical Crockford Base32 alphabet:
@@ -101,6 +109,32 @@ func ConstantTimeEqual(storedHash, submittedPasscode, salt string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(storedHash), []byte(expected)) == 1
+}
+
+// OperatorTokenTTL is how long an operator-bypass token stays valid.
+// Mirrors worker/src/passcode.ts OP_TOKEN_TTL_SECONDS. The screenshotter
+// mints a token immediately before the Browser Rendering call, so a tight
+// window is sufficient and bounds replay.
+const OperatorTokenTTL = 120 * time.Second
+
+// opTokenSig is the HMAC-SHA256 (hex) of `op:<websiteID>.<exp>` keyed by
+// salt. The `op:` prefix domain-separates this from the Worker's cookie
+// signature (`<websiteID>.<exp>`, no prefix) so neither can be replayed as
+// the other. MUST stay byte-identical to worker/src/passcode.ts hmacHex
+// over the same message.
+func opTokenSig(websiteID string, exp int64, salt string) string {
+	mac := hmac.New(sha256.New, []byte(salt))
+	_, _ = mac.Write([]byte(fmt.Sprintf("op:%s.%d", websiteID, exp)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// SignOpToken returns `<websiteID>.<exp>.<sig>` where exp = now +
+// OperatorTokenTTL (unix seconds) and sig = opTokenSig(...). The Worker's
+// verifyOpToken recomputes the HMAC and constant-time-compares. `now` is a
+// parameter so callers/tests stay deterministic.
+func SignOpToken(websiteID, salt string, now time.Time) string {
+	exp := now.Add(OperatorTokenTTL).Unix()
+	return fmt.Sprintf("%s.%d.%s", websiteID, exp, opTokenSig(websiteID, exp, salt))
 }
 
 // IsValidPasscodeFormat returns true if s looks like one of our passcodes:
