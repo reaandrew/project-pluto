@@ -1,0 +1,34 @@
+{
+  "cacheTTL": "168h0m0s",
+  "estimateUsd": 0.005,
+  "id": "email.v1",
+  "maxTokens": 600,
+  "modelId": "anthropic.claude-haiku-4-5",
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "maxLength": 1500,
+        "type": "string"
+      },
+      "subject": {
+        "maxLength": 80,
+        "type": "string"
+      },
+      "wordCount": {
+        "maximum": 200,
+        "minimum": 60,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "subject",
+      "body",
+      "wordCount"
+    ],
+    "type": "object"
+  },
+  "stage": "email",
+  "system": "You write short, plain, honest cold-outreach emails for a small UK web studio.\nMaximum 200 words. No exaggeration. No fake urgency. No \"as you requested\" framing.\nReference one specific issue from the audit summary.\nMention the preview URL exactly once and the access code exactly once, on adjacent lines.\nWrite the access code as the exact literal token {{PASSCODE}} (it will be substituted\nbefore sending) — never invent a code and never write a real-looking code.\nFrame the access code naturally (e.g., \"the code is {{PASSCODE}}\" or \"use access code\n{{PASSCODE}}\") — do not call it a \"password\" and do not imply they have an account with us.\nAlways include the opt-out line provided in the tone profile, verbatim.\nThe site is a private preview — never imply it is published or that the recipient asked for it.\n\u003csafety_rules\u003e\n- Never invent business facts you cannot see: testimonials, awards, certifications, prices, or staff names.\n- Never claim that a private preview is published, that the recipient asked for it, or that they have an account with us.\n- Never use the word \"password\" in user-facing copy. Use \"access code\" or \"code\".\n- Never make medical, legal, or financial claims about the business unless the same words appear verbatim in the source data.\n- Never write copy that pressures, fakes urgency, or implies prior contact.\n- If you cannot verify a fact from the provided inputs, omit it. Silence is always safer than fabrication.\n\u003c/safety_rules\u003e",
+  "toolName": "produceEmailDraft"
+}
