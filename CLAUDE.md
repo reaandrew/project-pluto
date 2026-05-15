@@ -46,6 +46,8 @@ Everything else (`02-data-model.md`, `03-events.md`, `05-capacity-and-cost.md`, 
 ## When invoked directly (not in Ralph's loop)
 Treat `.ralph/fix_plan.md` as the priority list, but do not produce the `---RALPH_STATUS---` block. Use a normal short summary at the end of the response.
 
+**Standing directive — always proceed, never ask "shall I start?".** When the user asks "what's next", asks for an iteration-plan review, or otherwise signals it's time to move forward, the expected behaviour is: identify the topmost unchecked `.ralph/fix_plan.md` item and **immediately begin implementing it** — feature branch → implement → `/review-iteration <iter-id>` → `gh pr create` → watch CI to green. Do **not** stop to ask for confirmation to start the next iteration; that confirmation is pre-granted. Only pause for genuinely destructive or human-only steps (e.g. `aws-vault`/DNS bootstrap items explicitly marked **HUMAN ONLY**). This is a durable preference, not a per-session one.
+
 ## After opening a PR — watch CI
 
 Opening the PR is not the end of the task. Once `gh pr create` returns the URL, poll `gh pr checks <num>` until every required check has settled (passed, failed, or skipped). If anything fails, read the failing log (`gh run view <run-id> --log-failed`), fix the root cause, push, and keep watching. Only stop watching once the PR is green or you have explicit confirmation from the user to leave it. Do not announce a task complete while checks are still running or failing — that's exactly when CI catches the things local lint/test missed (semgrep cloud rules, IAM propagation, etc.).
