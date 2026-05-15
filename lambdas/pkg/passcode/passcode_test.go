@@ -3,6 +3,7 @@ package passcode
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- Generate -------------------------------------------------------------
@@ -151,5 +152,46 @@ func TestGenerateProducesValidFormat(t *testing.T) {
 		if !IsValidPasscodeFormat(got) {
 			t.Errorf("Generate produced %q which IsValidPasscodeFormat rejects", got)
 		}
+	}
+}
+
+// --- SignOpToken (cross-pinned with worker/src/passcode.ts) --------------
+
+// crossPinned* is the canonical operator-token vector. The identical
+// triple is asserted in worker/tests/passcode.test.ts so the Go signer
+// and the Worker verifier can never silently drift.
+const (
+	crossPinnedWebsiteID = "site-pin"
+	crossPinnedSalt      = "pin-salt-vector"
+	crossPinnedExp       = int64(4102444800) // 2100-01-01T00:00:00Z
+	crossPinnedSig       = "0687580f2382fc3742256b57a28655ebbf478bfce3dcb1910e67ac78c84a96b4"
+)
+
+func TestOpTokenSigMatchesPinnedVector(t *testing.T) {
+	if got := opTokenSig(crossPinnedWebsiteID, crossPinnedExp, crossPinnedSalt); got != crossPinnedSig {
+		t.Fatalf("opTokenSig drift: got %q, want pinned %q (worker/src/passcode.ts must match)", got, crossPinnedSig)
+	}
+}
+
+func TestSignOpTokenStructureAndExpiry(t *testing.T) {
+	// now chosen so exp lands exactly on the pinned value.
+	now := time.Unix(crossPinnedExp, 0).Add(-OperatorTokenTTL)
+	tok := SignOpToken(crossPinnedWebsiteID, crossPinnedSalt, now)
+	want := crossPinnedWebsiteID + ".4102444800." + crossPinnedSig
+	if tok != want {
+		t.Fatalf("SignOpToken = %q, want %q", tok, want)
+	}
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		t.Fatalf("token must have 3 dot-separated parts, got %d (%q)", len(parts), tok)
+	}
+}
+
+func TestSignOpTokenDistinctPerWebsite(t *testing.T) {
+	now := time.Now()
+	a := SignOpToken("site-a", crossPinnedSalt, now)
+	b := SignOpToken("site-b", crossPinnedSalt, now)
+	if a == b {
+		t.Fatal("tokens for different websiteIds must differ")
 	}
 }
