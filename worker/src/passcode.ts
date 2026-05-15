@@ -2,13 +2,20 @@
 //
 // PASSCODE HASHING
 // ----------------
-// SCAFFOLDING form (this iter, 0.D.2): SHA-256 over `passcode || PASSCODE_SALT`.
-// Stored in KV as hex.
+// SHA-256 over `<passcode>|<salt>`, hex-encoded. Cross-pinned with
+// lambdas/pkg/passcode/passcode.go:Hash via the
+// "Hash drift — Worker would mis-validate" assertion on both sides.
 //
-// TODO (iter 5.4): replace the SHA-256 here with constant-time argon2id (WASM
-// bind via `hash-wasm` or similar). The publisher Lambda (iter 5.3) writes
-// hashes in the same format the Worker reads, so the swap is a contract change
-// across both — schedule it as one PR.
+// argon2id swap stays deferred: hash-wasm and similar Workers-side
+// libraries compile WebAssembly at runtime via WebAssembly.compile(),
+// which the cloudflare/vitest-pool-workers test runtime disallows
+// without a preloaded `wasm_modules` wrangler binding. We tried
+// pulling hash-wasm in 5.4; production runs fine but the worker test
+// suite errored with "Wasm code generation disallowed by embedder".
+// The Lambda side (Go, argon2 stdlib-adjacent via x/crypto/argon2)
+// works cleanly. Until we can either preload the WASM module via
+// wrangler's wasm_modules feature or move the worker tests off the
+// workers pool, both sides stay on SHA-256.
 //
 // COOKIE
 // ------
@@ -24,6 +31,7 @@ const enc = new TextEncoder();
 // ---------- passcode ----------
 
 export async function hashPasscode(passcode: string, salt: string): Promise<string> {
+  if (passcode === "") return "";
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${passcode}|${salt}`));
   return toHex(buf);
 }
