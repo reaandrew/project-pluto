@@ -600,3 +600,49 @@ async function postWebsiteAction(
   }
   return (await res.json()) as WebsiteView;
 }
+
+// --- iter 6.1/6.2: review queue (api-queue BFF) -----------------------
+//
+// GET /queue?status=&limit=&cursor= — Businesses in a review status,
+// ordered by priorityScore desc. Response is Business-card fields only
+// (no passcode/PII); the card lazy-loads the screenshot thumbnail from
+// the website endpoint.
+
+export interface QueueItem {
+  id: string;
+  name: string;
+  domain: string;
+  vertical: string;
+  location: string;
+  status: string;
+  priorityScore: number;
+  lastAuditId?: string;
+  lastSpecId?: string;
+  lastWebsiteId?: string;
+  discoveredAt?: string;
+}
+
+export interface QueueResponse {
+  status: string;
+  items: QueueItem[];
+  nextCursor?: string;
+}
+
+export async function getQueue(opts?: {
+  status?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<QueueResponse> {
+  const qs = new URLSearchParams();
+  if (opts?.status) qs.set('status', opts.status);
+  if (opts?.limit) qs.set('limit', String(opts.limit));
+  if (opts?.cursor) qs.set('cursor', opts.cursor);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  const url = `${cfg.bffBaseUrl}/queue${suffix}`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from GET ${url}: ${text}`);
+  }
+  return (await res.json()) as QueueResponse;
+}
