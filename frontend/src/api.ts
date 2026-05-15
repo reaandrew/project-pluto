@@ -561,3 +561,42 @@ async function decideWebsite(
   }
   return (await res.json()) as WebsiteView;
 }
+
+// regenerateSite asks for a fresh render (generator re-runs without
+// Bedrock; the publisher then issues a new passcode and invalidates the
+// old one). regeneratePasscode rotates only the passcode in place.
+
+export async function regenerateSite(
+  businessId: string,
+  websiteId: string,
+  notes?: string
+): Promise<WebsiteView> {
+  return postWebsiteAction(businessId, websiteId, 'regenerate-site', notes);
+}
+
+export async function regeneratePasscode(
+  businessId: string,
+  websiteId: string,
+  notes?: string
+): Promise<WebsiteView> {
+  return postWebsiteAction(businessId, websiteId, 'regenerate-passcode', notes);
+}
+
+async function postWebsiteAction(
+  businessId: string,
+  websiteId: string,
+  action: 'regenerate-site' | 'regenerate-passcode',
+  notes?: string
+): Promise<WebsiteView> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/website/${encodeURIComponent(websiteId)}/${action}`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes: notes ?? '' }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+  return (await res.json()) as WebsiteView;
+}

@@ -53,11 +53,17 @@ import (
 const consumerName = "generator"
 
 // SpecApprovedDetail mirrors api-specs's emitted spec.approved
-// payload. Duplicated because that lives in package main.
+// payload. It also decodes api-website's website.regenerate.requested
+// payload (iter 5.6b) — same {businessId, specId} plus a websiteId:
+// when WebsiteID is set the generator re-renders that existing preview
+// in place (publisher then overwrites the same R2 prefix + KV key,
+// invalidating the old passcode); when empty it mints a new one. The
+// generator never calls Bedrock, so a regenerate is a pure re-render.
 type SpecApprovedDetail struct {
 	BusinessID string `json:"businessId"`
 	SpecID     string `json:"specId"`
-	Version    int    `json:"version"`
+	Version    int    `json:"version,omitempty"`
+	WebsiteID  string `json:"websiteId,omitempty"`
 }
 
 // WebsiteGeneratedDetail is the `website.generated` event payload.
@@ -156,7 +162,13 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[SpecApprovedD
 		return fmt.Errorf("generator: sitebundle.Render: %w", err)
 	}
 
-	websiteID := d.NewWebsiteID()
+	// Regenerate (iter 5.6b) carries the existing websiteId so the
+	// re-render lands on the same R2 prefix + KV key; a first-time
+	// spec.approved has none, so mint a fresh id.
+	websiteID := env.Detail.WebsiteID
+	if websiteID == "" {
+		websiteID = d.NewWebsiteID()
+	}
 	s3Key := fmt.Sprintf("generated/%s/index.html", websiteID)
 	if err := d.PutHTML(ctx, s3Key, []byte(html)); err != nil {
 		return fmt.Errorf("generator: put html: %w", err)
