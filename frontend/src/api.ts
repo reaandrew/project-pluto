@@ -646,3 +646,21 @@ export async function getQueue(opts?: {
   }
   return (await res.json()) as QueueResponse;
 }
+
+// iter 6.3: reveal the passcode cleartext for the access strip. The
+// BFF KMS-decrypts Website.passcodeCipher within the revealable window
+// (operator-only). The cleartext is returned here, used in-memory by
+// the AccessStrip, and never persisted client-side.
+export async function revealPasscode(businessId: string, websiteId: string): Promise<string> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/website/${encodeURIComponent(websiteId)}/reveal-passcode`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+  return ((await res.json()) as { passcode: string }).passcode;
+}

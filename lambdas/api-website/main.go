@@ -144,6 +144,8 @@ func handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 		return handleRegenerateSite(ctx, logger, req, businessID, websiteID)
 	case method == "POST" && strings.HasSuffix(path, "/regenerate-passcode"):
 		return handleRegeneratePasscode(ctx, logger, req, businessID, websiteID)
+	case method == "POST" && strings.HasSuffix(path, "/reveal-passcode"):
+		return handleRevealPasscode(ctx, logger, businessID, websiteID)
 	default:
 		return httpresp.Error(405, "method not allowed"), nil
 	}
@@ -402,6 +404,61 @@ func handleRegeneratePasscode(ctx context.Context, logger *slog.Logger, req even
 	return httpresp.JSON(200, string(out)), nil
 }
 
+// --- POST .../{websiteId}/reveal-passcode -----------------------------
+//
+// Operator clicks "Reveal code" on the access strip. KMS-decrypts
+// Website.passcodeCipher and returns the cleartext to the authenticated
+// operator over HTTPS — the ONE sanctioned channel besides the email
+// body (10-quality-rules.md). The cleartext is held only in the
+// response; it is NEVER logged, evented, or persisted. Server-side
+// guards mirror the access-strip UI states: a wiped/revoked/expired
+// cipher returns 409 ("regenerate to view"), never a stale value.
+
+type revealResponse struct {
+	Passcode string `json:"passcode"`
+}
+
+func handleRevealPasscode(ctx context.Context, logger *slog.Logger, businessID, websiteID string) (events.APIGatewayV2HTTPResponse, error) {
+	if businessID == "" || websiteID == "" {
+		return httpresp.Error(400, "businessId and websiteId are required"), nil
+	}
+	current, err := getWebsite(ctx, businessID, websiteID)
+	if err != nil {
+		logger.Error("api-website.getWebsite failed", "err", err)
+		return httpresp.Error(500, "could not load website"), nil
+	}
+	if current == nil {
+		return httpresp.Error(404, "website not found"), nil
+	}
+	if current.PasscodeCipher == "" {
+		return httpresp.Error(409, "code wiped — regenerate to view"), nil
+	}
+	if current.PasscodeRevokedAt != "" {
+		return httpresp.Error(409, "passcode revoked — regenerate to view"), nil
+	}
+	if current.PasscodeRevealableUntil > 0 && nowFunc().UTC().Unix() > current.PasscodeRevealableUntil {
+		return httpresp.Error(409, "reveal window expired — regenerate to view"), nil
+	}
+
+	ops, err := passcodeOpsProvider(ctx)
+	if err != nil {
+		logger.Error("api-website.passcodeOps failed", "err", err)
+		return httpresp.Error(500, "passcode subsystem unavailable"), nil
+	}
+	cleartext, err := ops.Decrypt(ctx, current.PasscodeCipher)
+	if err != nil {
+		// Deliberately do not echo the KMS error detail to the client.
+		logger.Error("api-website.passcode.decrypt failed", "websiteId", websiteID, "err", err)
+		return httpresp.Error(500, "could not decrypt passcode"), nil
+	}
+
+	logger.Info("api-website.passcode.revealed", "websiteId", websiteID) // no cleartext
+	// The cleartext lives only in this response body. No feedback row
+	// (a reveal isn't a Spec/Website decision) and no event.
+	out, _ := json.Marshal(revealResponse{Passcode: cleartext})
+	return httpresp.JSON(200, string(out)), nil
+}
+
 // --- DDB helpers -------------------------------------------------------
 
 func getBusiness(ctx context.Context, businessID string) (*BusinessRow, error) {
@@ -581,6 +638,7 @@ type passcodeOps struct {
 	Gen     func() (string, error)
 	Hash    func(code, salt string) string
 	Encrypt func(ctx context.Context, cleartext string) (string, error)
+	Decrypt func(ctx context.Context, ciphertextB64 string) (string, error)
 	KVPut   func(ctx context.Context, key, value string, meta map[string]string) error
 	Salt    string
 }
@@ -607,6 +665,9 @@ func defaultPasscodeOps(ctx context.Context) (*passcodeOps, error) {
 		Hash: passcode.Hash,
 		Encrypt: func(ctx context.Context, cleartext string) (string, error) {
 			return passcode.EncryptCleartext(ctx, kmsClient, kmsKeyID, cleartext)
+		},
+		Decrypt: func(ctx context.Context, ciphertextB64 string) (string, error) {
+			return passcode.DecryptCleartext(ctx, kmsClient, ciphertextB64)
 		},
 		KVPut: kv.Put,
 		Salt:  salt,

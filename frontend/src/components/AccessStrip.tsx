@@ -27,6 +27,11 @@ export interface AccessStripProps {
   onCopyUrl?: (url: string) => void;
   onCopyCode?: (code: string) => void;
   onRegenerateCode?: () => void;
+  // iter 6.3: fetch + display the cleartext on demand. The parent owns
+  // the reveal call (POST .../reveal-passcode) and feeds the result
+  // back via `passcode`. Shown only while the cleartext window is open
+  // and nothing has been revealed yet.
+  onReveal?: () => void;
 }
 
 export default function AccessStrip(props: AccessStripProps) {
@@ -60,11 +65,13 @@ export default function AccessStrip(props: AccessStripProps) {
       <div style={styles.row}>
         <span style={styles.label}>Code:</span>
         <code style={styles.code} aria-label="passcode">
-          {codeAvailable
-            ? showCode
-              ? props.passcode
-              : '••••-••••'
-            : 'Code wiped — regenerate to view'}
+          {cleartextWiped
+            ? 'Code wiped — regenerate to view'
+            : codeAvailable
+              ? showCode
+                ? props.passcode
+                : '••••-••••'
+              : 'Code hidden'}
         </code>
         {codeAvailable && (
           <>
@@ -79,6 +86,11 @@ export default function AccessStrip(props: AccessStripProps) {
               {showCode ? 'Hide' : 'Show'}
             </button>
           </>
+        )}
+        {!cleartextWiped && !codeAvailable && props.onReveal && (
+          <button type="button" style={styles.btn} onClick={() => props.onReveal?.()}>
+            Reveal code
+          </button>
         )}
         <button type="button" style={styles.btn} onClick={() => props.onRegenerateCode?.()}>
           Regenerate code
