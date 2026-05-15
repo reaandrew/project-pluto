@@ -28,6 +28,7 @@ var StageMap = map[string]string{
 	"spec-generator": StagePreview,
 	"generator":      StagePreview,
 	"publisher":      StagePreview,
+	"screenshotter":  StagePreview,
 	"email-draft":    StageOutreach,
 	"sender":         StageOutreach,
 
