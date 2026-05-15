@@ -16,6 +16,7 @@ locals {
     "spec-generator",   # iter 4.2
     "generator",        # iter 5.2
     "publisher",        # iter 5.3
+    "screenshotter",    # iter 5.5
     "email-draft",      # iter 7.2
     "sender",           # iter 8.2
     "reply-triage",     # iter 8.5

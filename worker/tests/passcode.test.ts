@@ -116,6 +116,14 @@ describe("operator bypass token (iter 5.5)", () => {
     // Feed the op-token body in as if it were the cookie value.
     expect(await verifyCookie(`${COOKIE_NAME}=${token}`, "site-op", SALT)).toBe(false);
   });
+
+  // Cross-pinned with lambdas/pkg/passcode/passcode_test.go
+  // (crossPinned* constants). If either side's HMAC scheme drifts, exactly
+  // one of these two suites goes red.
+  it("accepts the Go-cross-pinned vector", async () => {
+    const token = "site-pin.4102444800.0687580f2382fc3742256b57a28655ebbf478bfce3dcb1910e67ac78c84a96b4";
+    expect(await verifyOpToken(token, "site-pin", "pin-salt-vector")).toBe(true);
+  });
 });
 
 describe("operator bypass — /sites routing (iter 5.5)", () => {
@@ -293,6 +301,35 @@ describe("revocation propagation (iter 5.4)", () => {
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("This preview has been revoked.");
+  });
+
+  it("serves desktop/mobile screenshots (iter 5.5 sizes) with a valid cookie", async () => {
+    resetRevocationCacheForTests();
+    const env = {
+      PASSCODE_SALT: SALT,
+      ENVIRONMENT: "test",
+      PREVIEWS: {
+        get: async (key: string) =>
+          key === "screenshots/site-shot/desktop.png"
+            ? {
+                body: "PNGDATA",
+                httpEtag: '"p"',
+                writeHttpMetadata: (_h: Headers) => {},
+              }
+            : null,
+      } as unknown as R2Bucket,
+      PREVIEW_PASSCODES_KV: { get: async () => "hash" } as unknown as KVNamespace,
+    };
+    const cookieHeader = (await signCookie("site-shot", SALT)).split(";")[0];
+    const res = await worker.fetch(
+      new Request("https://example.test/screenshots/site-shot/desktop.png", {
+        headers: { cookie: cookieHeader },
+      }),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
   });
 
   it("cookie + revoked KV → /screenshots returns 403", async () => {
