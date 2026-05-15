@@ -492,3 +492,72 @@ async function decideSpec(
   }
   return (await res.json()) as Spec;
 }
+
+// --- iter 5.6: site-preview review (api-website BFF) -------------------
+//
+// The website view is deliberately sanitised server-side: passcodeHash /
+// passcodeCipher never reach the client. previewUrl + screenshots +
+// status + the cleartext-window timestamp are all the page needs.
+
+export interface WebsiteView {
+  id: string;
+  specId: string;
+  status: string;
+  previewUrl?: string;
+  screenshots?: Record<string, string>;
+  passcodeRevealableUntil?: number;
+  passcodeRevokedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CandidateWebsiteResponse {
+  business: CandidateBusiness;
+  website?: WebsiteView;
+}
+
+export async function getCandidateWebsite(businessId: string): Promise<CandidateWebsiteResponse> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/website`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from GET ${url}`);
+  }
+  return (await res.json()) as CandidateWebsiteResponse;
+}
+
+export async function approveWebsite(
+  businessId: string,
+  websiteId: string,
+  notes?: string
+): Promise<WebsiteView> {
+  return decideWebsite(businessId, websiteId, 'approve', notes);
+}
+
+export async function rejectWebsite(
+  businessId: string,
+  websiteId: string,
+  notes?: string
+): Promise<WebsiteView> {
+  return decideWebsite(businessId, websiteId, 'reject', notes);
+}
+
+async function decideWebsite(
+  businessId: string,
+  websiteId: string,
+  decision: 'approve' | 'reject',
+  notes?: string
+): Promise<WebsiteView> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/website/${encodeURIComponent(websiteId)}/${decision}`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes: notes ?? '' }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+  return (await res.json()) as WebsiteView;
+}

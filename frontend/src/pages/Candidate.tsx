@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   approveSpec,
+  approveWebsite,
   getCandidate,
+  getCandidateWebsite,
   patchSpec,
   rejectSpec,
+  rejectWebsite,
   type CandidateResponse,
   type Spec,
   type SpecV1Content,
+  type WebsiteView,
 } from '../api';
+import AccessStrip from '../components/AccessStrip';
 
 // Candidate is the iter 4.3 /queue/[id] page — the operator's spec
 // review surface. Loads {business, spec} from the api-specs BFF and
@@ -35,6 +40,9 @@ export default function Candidate() {
   const [busy, setBusy] = useState<'idle' | 'saving' | 'approving' | 'rejecting'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [website, setWebsite] = useState<WebsiteView | null>(null);
+  const [webBusy, setWebBusy] = useState<'idle' | 'approving' | 'rejecting'>('idle');
+  const [webError, setWebError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!businessId) {
@@ -58,10 +66,48 @@ export default function Candidate() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // Website is independent of the spec view — a failure here must not
+    // block spec review (a business may have a spec but no published
+    // preview yet).
+    getCandidateWebsite(businessId)
+      .then((d) => {
+        if (!cancelled) setWebsite(d.website ?? null);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setWebError(e.message);
+      });
     return () => {
       cancelled = true;
     };
   }, [businessId]);
+
+  async function onApproveWebsite() {
+    if (!businessId || !website) return;
+    setWebBusy('approving');
+    setWebError(null);
+    try {
+      setWebsite(await approveWebsite(businessId, website.id, notes || undefined));
+      setNotes('');
+    } catch (e) {
+      setWebError((e as Error).message);
+    } finally {
+      setWebBusy('idle');
+    }
+  }
+
+  async function onRejectWebsite() {
+    if (!businessId || !website) return;
+    setWebBusy('rejecting');
+    setWebError(null);
+    try {
+      setWebsite(await rejectWebsite(businessId, website.id, notes || undefined));
+      setNotes('');
+    } catch (e) {
+      setWebError((e as Error).message);
+    } finally {
+      setWebBusy('idle');
+    }
+  }
 
   function refreshSpec(updated: Spec) {
     setData((d) => (d ? { ...d, spec: updated } : d));
@@ -253,6 +299,73 @@ export default function Candidate() {
           )}
         </>
       )}
+
+      <section style={{ marginTop: '2rem' }} aria-label="site-preview">
+        <h3 style={{ marginBottom: '0.5rem' }}>
+          Site preview
+          {website && (
+            <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem', color: '#666' }}>
+              {website.status}
+            </span>
+          )}
+        </h3>
+        {!website && !webError && (
+          <p style={{ color: '#666' }}>
+            No preview published yet. The generator + publisher run after the spec is approved; the
+            screenshotter then captures desktop + mobile shots.
+          </p>
+        )}
+        {webError && <p style={{ color: 'crimson' }}>Could not load preview: {webError}</p>}
+        {website && (
+          <>
+            <AccessStrip
+              previewUrl={website.previewUrl}
+              cleartextRevealableUntil={
+                website.passcodeRevealableUntil
+                  ? new Date(website.passcodeRevealableUntil * 1000)
+                  : null
+              }
+              onCopyUrl={(u) => void navigator.clipboard?.writeText(u)}
+            />
+            {website.screenshots && (
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                {Object.entries(website.screenshots).map(([size, url]) => (
+                  <figure key={size} style={{ margin: 0 }}>
+                    <img
+                      src={url}
+                      alt={`${size} screenshot`}
+                      style={{ maxWidth: 280, border: '1px solid #ddd', borderRadius: 4 }}
+                    />
+                    <figcaption style={{ fontSize: '0.8rem', color: '#666' }}>{size}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                onClick={onApproveWebsite}
+                disabled={webBusy !== 'idle' || website.status !== 'published'}
+              >
+                {webBusy === 'approving' ? 'Approving…' : 'Approve preview'}
+              </button>
+              <button
+                onClick={onRejectWebsite}
+                disabled={webBusy !== 'idle' || website.status !== 'published'}
+              >
+                {webBusy === 'rejecting' ? 'Rejecting…' : 'Reject preview'}
+              </button>
+              {website.status !== 'published' && (
+                <span style={{ marginLeft: 'auto', color: '#666', fontSize: '0.85rem' }}>
+                  Preview is {website.status}. Actions disabled.
+                </span>
+              )}
+            </div>
+            {webError && website && (
+              <p style={{ color: 'crimson', marginTop: '0.5rem' }}>{webError}</p>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }
