@@ -68,13 +68,20 @@ func Generate() (string, error) {
 	return string(out), nil
 }
 
-// Hash returns the canonical hex-encoded hash of (passcode, salt). Matches
-// `worker/src/passcode.ts:hashPasscode` exactly: SHA-256 of the string
-// `<passcode>|<salt>`. Both sides MUST stay in sync; the iter 5.4 swap to
-// argon2id changes both this function and the Worker's hashPasscode in
-// one go (their format is a contract).
+// Hash returns the canonical hex-encoded hash of (passcode, salt).
+// Matches worker/src/passcode.ts:hashPasscode byte-for-byte (the same
+// SHA-256 of `<passcode>|<salt>`). Both sides MUST stay in sync.
 //
-// Returns the hex-encoded digest (64 lowercase hex chars).
+// argon2id swap stays deferred. The Go side picks up `x/crypto/argon2`
+// cleanly, but the Cloudflare Workers test runtime
+// (cloudflare/vitest-pool-workers) blocks dynamic
+// `WebAssembly.compile()` which hash-wasm + every other available
+// argon2 library on Workers depends on. Production Workers DO support
+// WASM, but we need either the wrangler `wasm_modules` preload or a
+// worker-pool-free test path before flipping the format on both
+// sides. Tracked as a follow-up to iter 5.4.
+//
+// Returns the hex-encoded SHA-256 digest (64 lowercase hex chars).
 func Hash(passcode, salt string) string {
 	if passcode == "" {
 		return ""

@@ -100,6 +100,15 @@ async function serveAsset(
     return passcodeFormResponse(websiteId);
   }
 
+  // Cookie valid → check the passcode is still issued before serving.
+  // Closes the revocation-propagation gap: a deleted KV entry blocks
+  // access within REVOCATION_TTL_SECONDS (60s) even when a valid
+  // signed cookie is presented. Without this check, cookies remained
+  // valid for their full 24h TTL after revocation.
+  if (!(await passcodeStillIssued(env, websiteId))) {
+    return passcodeFormResponse(websiteId, "This preview has been revoked.");
+  }
+
   const objectKey = assetPath ? `sites/${websiteId}/${assetPath}` : `sites/${websiteId}/index.html`;
   const obj = await env.PREVIEWS.get(objectKey);
   if (!obj) {
@@ -121,6 +130,10 @@ async function serveScreenshot(
 ): Promise<Response> {
   const cookieValid = await verifyCookie(request.headers.get("cookie") ?? "", websiteId, env.PASSCODE_SALT);
   if (!cookieValid) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  // Revocation check (see serveAsset for rationale).
+  if (!(await passcodeStillIssued(env, websiteId))) {
     return new Response("Forbidden", { status: 403 });
   }
   const obj = await env.PREVIEWS.get(`screenshots/${websiteId}/${size}.png`);
@@ -165,6 +178,42 @@ async function checkPasscode(env: Env, websiteId: string, submitted: string): Pr
   const stored = await env.PREVIEW_PASSCODES_KV.get(`passcode:${websiteId}`);
   if (!stored) return false;
   return validatePasscode(submitted, stored, env.PASSCODE_SALT);
+}
+
+// Revocation propagation knob. KV reads are cheap but not free; cache
+// the "passcode still issued" check per-website at the isolate level
+// so a hot preview pays one KV read per REVOCATION_TTL_SECONDS, not
+// one per request.
+const REVOCATION_TTL_SECONDS = 60;
+const revocationCache = new Map<string, { expiresAt: number; issued: boolean }>();
+
+// passcodeStillIssued returns true if the KV namespace currently has a
+// hash entry for this websiteId. A missing entry (operator revocation
+// via the Cloudflare API, or by Worker.Delete from a future regen
+// flow) flips this to false within REVOCATION_TTL_SECONDS at the
+// isolate level — and instantly on cold isolates.
+//
+// Per-isolate cache is good enough: Cloudflare warm isolates are
+// scoped per-region per-cold-start; even a hot website doing 100 RPS
+// won't keep more than one regional isolate hot for more than a few
+// minutes. The 60s cache bounds the propagation lag everywhere.
+export async function passcodeStillIssued(env: Env, websiteId: string): Promise<boolean> {
+  const now = Date.now() / 1000;
+  const cached = revocationCache.get(websiteId);
+  if (cached && cached.expiresAt > now) {
+    return cached.issued;
+  }
+  const stored = await env.PREVIEW_PASSCODES_KV.get(`passcode:${websiteId}`);
+  const issued = stored !== null && stored !== "";
+  revocationCache.set(websiteId, { expiresAt: now + REVOCATION_TTL_SECONDS, issued });
+  return issued;
+}
+
+// resetRevocationCacheForTests clears the in-memory cache between
+// tests so KV-state changes are observed deterministically. Exported
+// only via the source file; tests import directly.
+export function resetRevocationCacheForTests(): void {
+  revocationCache.clear();
 }
 
 function passcodeFormResponse(websiteId: string, error?: string): Response {

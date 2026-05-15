@@ -100,3 +100,103 @@ describe("response headers", () => {
     expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
   });
 });
+
+import { passcodeStillIssued, resetRevocationCacheForTests } from "../src/index";
+
+describe("revocation propagation (iter 5.4)", () => {
+  // Build a mutable KV mock so we can flip the stored value between calls
+  // without rebuilding the whole env.
+  function envWithKV(initial: string | null) {
+    let stored: string | null = initial;
+    const kv = {
+      get: async (_key: string) => stored,
+      set: (v: string | null) => {
+        stored = v;
+      },
+    };
+    return {
+      env: {
+        PASSCODE_SALT: SALT,
+        ENVIRONMENT: "test",
+        PREVIEWS: {} as R2Bucket,
+        PREVIEW_PASSCODES_KV: kv as unknown as KVNamespace,
+      },
+      mutateKV: (v: string | null) => kv.set(v),
+    };
+  }
+
+  it("returns true when KV has a hash for the websiteId", async () => {
+    resetRevocationCacheForTests();
+    const { env } = envWithKV("some-hash");
+    expect(await passcodeStillIssued(env, "site-1")).toBe(true);
+  });
+
+  it("returns false when KV has no entry (revoked)", async () => {
+    resetRevocationCacheForTests();
+    const { env } = envWithKV(null);
+    expect(await passcodeStillIssued(env, "site-1")).toBe(false);
+  });
+
+  it("treats an empty-string KV value as revoked", async () => {
+    resetRevocationCacheForTests();
+    const { env } = envWithKV("");
+    expect(await passcodeStillIssued(env, "site-1")).toBe(false);
+  });
+
+  it("caches the result across rapid calls (within 60s)", async () => {
+    resetRevocationCacheForTests();
+    let getCalls = 0;
+    const env = {
+      PASSCODE_SALT: SALT,
+      ENVIRONMENT: "test",
+      PREVIEWS: {} as R2Bucket,
+      PREVIEW_PASSCODES_KV: {
+        get: async () => {
+          getCalls++;
+          return "hash";
+        },
+      } as unknown as KVNamespace,
+    };
+    await passcodeStillIssued(env, "site-cache");
+    await passcodeStillIssued(env, "site-cache");
+    await passcodeStillIssued(env, "site-cache");
+    expect(getCalls).toBe(1);
+  });
+
+  it("cookie + revoked KV → /sites returns the passcode form", async () => {
+    resetRevocationCacheForTests();
+    const { env } = envWithKV(null); // revoked
+
+    // Forge a valid signed cookie.
+    const setCookie = await signCookie("site-revoked", SALT);
+    const cookieHeader = setCookie.split(";")[0];
+
+    const res = await worker.fetch(
+      new Request("https://example.test/sites/site-revoked", {
+        headers: { cookie: cookieHeader },
+      }),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("This preview has been revoked.");
+  });
+
+  it("cookie + revoked KV → /screenshots returns 403", async () => {
+    resetRevocationCacheForTests();
+    const { env } = envWithKV(null);
+
+    const setCookie = await signCookie("site-revoked-shot", SALT);
+    const cookieHeader = setCookie.split(";")[0];
+
+    const res = await worker.fetch(
+      new Request("https://example.test/screenshots/site-revoked-shot/thumb.png", {
+        headers: { cookie: cookieHeader },
+      }),
+      env,
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(403);
+  });
+});
