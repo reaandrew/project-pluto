@@ -149,7 +149,9 @@ resource "aws_cloudwatch_event_rule" "inbound_mail" {
     }
   })
 
-  tags = local.common_tags
+  # No tags: this rule is on the DEFAULT event bus, and the CI deploy
+  # role (aws-setup/, do-not-touch) only allows events:TagResource on
+  # custom-pipeline-bus rule ARNs. Tags are non-essential here.
 }
 
 resource "aws_cloudwatch_event_target" "inbound_mail_detector" {
