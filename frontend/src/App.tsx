@@ -47,6 +47,9 @@ export default function App() {
         <NavLink to="/feedback" style={navStyle}>
           Feedback
         </NavLink>
+        <NavLink to="/tuners" style={navStyle}>
+          Tuners
+        </NavLink>
         <NavLink to="/metrics" style={navStyle}>
           Metrics
         </NavLink>

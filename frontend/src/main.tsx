@@ -15,6 +15,7 @@ import Queue from './pages/Queue';
 import Replies from './pages/Replies';
 import Settings from './pages/Settings';
 import Targeting from './pages/Targeting';
+import Tuners from './pages/Tuners';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element in index.html');
@@ -37,6 +38,7 @@ createRoot(root).render(
             <Route path="queue/:businessId/email" element={<EmailReview />} />
             <Route path="replies" element={<Replies />} />
             <Route path="feedback" element={<Feedback />} />
+            <Route path="tuners" element={<Tuners />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/targeting" element={<Targeting />} />
             <Route path="metrics" element={<Metrics />} />

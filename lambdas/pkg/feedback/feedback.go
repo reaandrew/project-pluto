@@ -31,6 +31,12 @@ const (
 	SubjectSpec          = "spec"
 	SubjectWebsite       = "website"
 	SubjectEmail         = "email"
+	// SubjectProfile is the iter-9.4 tuner-delta audit subject:
+	// applying/dismissing a proposed profile delta. Profile tuning is
+	// vertical-scoped, not business-scoped, so a Profile feedback row
+	// is the one case where BusinessID may be empty (SubjectID is the
+	// delta id).
+	SubjectProfile = "profile"
 )
 
 const (
@@ -38,6 +44,8 @@ const (
 	ActionReject     = "reject"
 	ActionEdit       = "edit"
 	ActionRegenerate = "regenerate"
+	ActionApply      = "apply"   // iter 9.4: operator applied a tuner delta
+	ActionDismiss    = "dismiss" // iter 9.4: operator dismissed a tuner delta
 )
 
 // Row mirrors the Feedback shape in 02-data-model.md.
@@ -161,12 +169,14 @@ func validate(in CaptureInput) error {
 		return errors.New("subject is required")
 	}
 	if !isKnownSubject(in.Subject) {
-		return fmt.Errorf("subject %q not in {audit, qualification, spec, website, email}", in.Subject)
+		return fmt.Errorf("subject %q not in {audit, qualification, spec, website, email, profile}", in.Subject)
 	}
 	if in.SubjectID == "" {
 		return errors.New("subjectId is required")
 	}
-	if in.BusinessID == "" {
+	// Profile-tuning audit rows (iter 9.4) are vertical-scoped, not
+	// business-scoped — no businessId. Every other subject requires one.
+	if in.BusinessID == "" && in.Subject != SubjectProfile {
 		return errors.New("businessId is required")
 	}
 	if in.Actor == "" {
@@ -176,14 +186,14 @@ func validate(in CaptureInput) error {
 		return errors.New("action is required")
 	}
 	if !isKnownAction(in.Action) {
-		return fmt.Errorf("action %q not in {approve, reject, edit, regenerate}", in.Action)
+		return fmt.Errorf("action %q not in {approve, reject, edit, regenerate, apply, dismiss}", in.Action)
 	}
 	return nil
 }
 
 func isKnownSubject(s string) bool {
 	switch s {
-	case SubjectAudit, SubjectQualification, SubjectSpec, SubjectWebsite, SubjectEmail:
+	case SubjectAudit, SubjectQualification, SubjectSpec, SubjectWebsite, SubjectEmail, SubjectProfile:
 		return true
 	}
 	return false
@@ -191,7 +201,7 @@ func isKnownSubject(s string) bool {
 
 func isKnownAction(a string) bool {
 	switch a {
-	case ActionApprove, ActionReject, ActionEdit, ActionRegenerate:
+	case ActionApprove, ActionReject, ActionEdit, ActionRegenerate, ActionApply, ActionDismiss:
 		return true
 	}
 	return false
