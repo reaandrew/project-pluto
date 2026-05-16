@@ -23,6 +23,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -85,20 +86,36 @@ type runDeps struct {
 	ReplyDomain   string
 }
 
-func handle(ctx context.Context, evt lambdaevents.S3Event) error {
+// s3EBDetail is the EventBridge "Object Created" (source aws.s3)
+// detail. The inbound bucket fans out via EventBridge because S3
+// forbids two direct notification destinations sharing a prefix
+// (reply-detector + reply-triage both consume inbound/).
+type s3EBDetail struct {
+	Bucket struct {
+		Name string `json:"name"`
+	} `json:"bucket"`
+	Object struct {
+		Key string `json:"key"`
+	} `json:"object"`
+}
+
+func handle(ctx context.Context, evt lambdaevents.EventBridgeEvent) error {
 	deps, err := buildDeps(ctx)
 	if err != nil {
 		return err
 	}
-	for _, r := range evt.Records {
-		if perr := processRecord(ctx, deps, r.S3.Bucket.Name, r.S3.Object.Key); perr != nil {
-			// Return on first hard error so the async invoke retries;
-			// the raw object also persists in the inbound bucket for
-			// the 90-day lifecycle, so a reply is never silently lost.
-			return perr
-		}
+	var d s3EBDetail
+	if err := json.Unmarshal(evt.Detail, &d); err != nil {
+		return fmt.Errorf("decode S3 EventBridge detail: %w", err)
 	}
-	return nil
+	if d.Bucket.Name == "" || d.Object.Key == "" {
+		applog.FromContext(ctx).Warn("reply.empty_event")
+		return nil
+	}
+	// Return a hard error so EventBridge retries; the raw object also
+	// persists in the inbound bucket for the 90-day lifecycle, so a
+	// reply is never silently lost.
+	return processRecord(ctx, deps, d.Bucket.Name, d.Object.Key)
 }
 
 func processRecord(ctx context.Context, d runDeps, bucket, key string) error {

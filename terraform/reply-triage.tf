@@ -12,11 +12,12 @@
 # all already granted. Only new grant is scoped s3:GetObject on the
 # inbound bucket. No on-failure DLQ / event-invoke-config (the CI
 # deploy role lacks lambda:PutFunctionEventInvokeConfig — see iter 8.4;
-# S3 async retries + the 90d bucket lifecycle keep replies safe).
+# EventBridge retries + the 90d bucket lifecycle keep replies safe).
 #
-# The S3 notification itself lives in reply-detector.tf (only one
-# aws_s3_bucket_notification per bucket) — this iter adds a second
-# lambda_function {} block there.
+# Trigger: the inbound bucket emits to EventBridge; a single rule in
+# reply-detector.tf fans "Object Created" to BOTH reply-detector and
+# reply-triage (S3 forbids two notification destinations with the same
+# prefix+event, so direct S3→Lambda fan-out is not possible).
 # ---------------------------------------------------------------------------
 
 data "archive_file" "reply_triage" {
@@ -56,14 +57,9 @@ resource "aws_lambda_function" "reply_triage" {
   tags = local.common_tags
 }
 
-resource "aws_lambda_permission" "reply_triage_s3" {
-  statement_id   = "AllowS3Invoke"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.reply_triage.function_name
-  principal      = "s3.amazonaws.com"
-  source_arn     = aws_s3_bucket.inbound_mail.arn
-  source_account = data.aws_caller_identity.current.account_id
-}
+# Invocation permission (EventBridge principal) + the S3→EventBridge
+# rule fan-out live in reply-detector.tf alongside the shared inbound
+# bucket + rule.
 
 resource "aws_iam_role_policy" "reply_triage_s3_read" {
   name = "reply-triage-s3-read"

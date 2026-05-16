@@ -32,6 +32,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -138,17 +139,32 @@ type runDeps struct {
 	ReplyDomain    string
 }
 
-func handle(ctx context.Context, evt lambdaevents.S3Event) error {
+// s3EBDetail is the EventBridge "Object Created" (source aws.s3)
+// detail. The inbound bucket fans out via EventBridge because S3
+// forbids two direct notification destinations sharing a prefix.
+type s3EBDetail struct {
+	Bucket struct {
+		Name string `json:"name"`
+	} `json:"bucket"`
+	Object struct {
+		Key string `json:"key"`
+	} `json:"object"`
+}
+
+func handle(ctx context.Context, evt lambdaevents.EventBridgeEvent) error {
 	deps, err := buildDeps(ctx)
 	if err != nil {
 		return err
 	}
-	for _, r := range evt.Records {
-		if perr := processRecord(ctx, deps, r.S3.Bucket.Name, r.S3.Object.Key); perr != nil {
-			return perr // async retry; raw object persists in S3
-		}
+	var d s3EBDetail
+	if err := json.Unmarshal(evt.Detail, &d); err != nil {
+		return fmt.Errorf("decode S3 EventBridge detail: %w", err)
 	}
-	return nil
+	if d.Bucket.Name == "" || d.Object.Key == "" {
+		applog.FromContext(ctx).Warn("reply_triage.empty_event")
+		return nil
+	}
+	return processRecord(ctx, deps, d.Bucket.Name, d.Object.Key) // async retry; object persists in S3
 }
 
 func processRecord(ctx context.Context, d runDeps, bucket, key string) error {

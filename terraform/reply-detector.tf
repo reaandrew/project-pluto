@@ -125,37 +125,59 @@ resource "aws_lambda_function" "reply_detector" {
 # on-failure destination would need `lambda:PutFunctionEventInvokeConfig`
 # on the CI deploy role (defined in the do-not-touch aws-setup/
 # singleton) — out of scope for iter 8.4.
-resource "aws_lambda_permission" "reply_detector_s3" {
-  statement_id   = "AllowS3Invoke"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.reply_detector.function_name
-  principal      = "s3.amazonaws.com"
-  source_arn     = aws_s3_bucket.inbound_mail.arn
-  source_account = data.aws_caller_identity.current.account_id
+# Fan-out via EventBridge. S3 forbids two notification destinations
+# with the same prefix + event type ("Configuration is ambiguously
+# defined") — so the inbound bucket emits to EventBridge instead and a
+# single rule fans the "Object Created" event to BOTH consumers
+# (reply-detector iter 8.4 + reply-triage iter 8.5.1). EventBridge has
+# no overlap restriction and is the idiomatic multi-consumer pattern.
+resource "aws_s3_bucket_notification" "inbound_mail" {
+  bucket      = aws_s3_bucket.inbound_mail.id
+  eventbridge = true
 }
 
-resource "aws_s3_bucket_notification" "inbound_mail" {
-  bucket = aws_s3_bucket.inbound_mail.id
+resource "aws_cloudwatch_event_rule" "inbound_mail" {
+  name        = "ai-website-agency-inbound-mail${local.env_suffix}"
+  description = "SES inbound replies landed in S3 → reply-detector + reply-triage"
 
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.reply_detector.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "inbound/"
-  }
+  event_pattern = jsonencode({
+    source        = ["aws.s3"]
+    "detail-type" = ["Object Created"]
+    detail = {
+      bucket = { name = [aws_s3_bucket.inbound_mail.id] }
+      object = { key = [{ prefix = "inbound/" }] }
+    }
+  })
 
-  # iter 8.5.1 — reply-triage is a second consumer of the same events
-  # (only one aws_s3_bucket_notification is allowed per bucket, so its
-  # subscription is declared here alongside reply-detector's).
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.reply_triage.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "inbound/"
-  }
+  tags = local.common_tags
+}
 
-  depends_on = [
-    aws_lambda_permission.reply_detector_s3,
-    aws_lambda_permission.reply_triage_s3,
-  ]
+resource "aws_cloudwatch_event_target" "inbound_mail_detector" {
+  rule      = aws_cloudwatch_event_rule.inbound_mail.name
+  target_id = "reply-detector"
+  arn       = aws_lambda_function.reply_detector.arn
+}
+
+resource "aws_cloudwatch_event_target" "inbound_mail_triage" {
+  rule      = aws_cloudwatch_event_rule.inbound_mail.name
+  target_id = "reply-triage"
+  arn       = aws_lambda_function.reply_triage.arn
+}
+
+resource "aws_lambda_permission" "reply_detector_eb" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.reply_detector.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.inbound_mail.arn
+}
+
+resource "aws_lambda_permission" "reply_triage_eb" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.reply_triage.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.inbound_mail.arn
 }
 
 # Scoped read on the inbound bucket. DynamoDB rw + EventBridge
