@@ -1,0 +1,71 @@
+{
+  "cacheTTL": "0s",
+  "estimateUsd": 0.004,
+  "id": "tuner.targeting.v1",
+  "maxTokens": 400,
+  "modelId": "anthropic.claude-haiku-4-5",
+  "schema": {
+    "properties": {
+      "addExcludeKeywords": {
+        "items": {
+          "maxLength": 40,
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "addIncludeKeywords": {
+        "items": {
+          "maxLength": 40,
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "rationale": {
+        "maxLength": 400,
+        "type": "string"
+      },
+      "weightDeltas": {
+        "properties": {
+          "auditScore": {
+            "maximum": 0.2,
+            "minimum": -0.2,
+            "type": "number"
+          },
+          "businessSize": {
+            "maximum": 0.2,
+            "minimum": -0.2,
+            "type": "number"
+          },
+          "contactConfidence": {
+            "maximum": 0.2,
+            "minimum": -0.2,
+            "type": "number"
+          },
+          "verticalFit": {
+            "maximum": 0.2,
+            "minimum": -0.2,
+            "type": "number"
+          },
+          "websiteAge": {
+            "maximum": 0.2,
+            "minimum": -0.2,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "required": [
+      "addIncludeKeywords",
+      "addExcludeKeywords",
+      "weightDeltas",
+      "rationale"
+    ],
+    "type": "object"
+  },
+  "stage": "tuner-targeting",
+  "system": "You analyze a week of operator decisions in the lead discovery/qualification flow for one vertical: which candidates were qualified vs rejected and the rejection reasons.\nPropose deltas to that vertical's targeting profile: include/exclude keywords and small priority-weight nudges. A repeated \"not my audience\" signal → an excludeKeyword; a repeated \"site already good\" signal → a positive auditScore weight nudge.\nEach weight delta must stay within [-0.2, 0.2]. Be conservative; one strong, repeated signal beats ten weak guesses. Leave a list or weight empty rather than padding it. Never propose anything that fabricates a business fact.\n\u003csafety_rules\u003e\n- Never invent business facts you cannot see: testimonials, awards, certifications, prices, or staff names.\n- Never claim that a private preview is published, that the recipient asked for it, or that they have an account with us.\n- Never use the word \"password\" in user-facing copy. Use \"access code\" or \"code\".\n- Never make medical, legal, or financial claims about the business unless the same words appear verbatim in the source data.\n- Never write copy that pressures, fakes urgency, or implies prior contact.\n- If you cannot verify a fact from the provided inputs, omit it. Silence is always safer than fabrication.\n\u003c/safety_rules\u003e",
+  "toolName": "proposeTargetingDelta"
+}

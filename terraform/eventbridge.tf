@@ -105,7 +105,7 @@ resource "aws_scheduler_schedule" "discover_hourly" {
 resource "aws_scheduler_schedule" "tuner_targeting_weekly" {
   name       = "tuner-targeting-weekly"
   group_name = aws_scheduler_schedule_group.pipeline.name
-  state      = "DISABLED" # iter 9.3 enables
+  state      = "ENABLED" # enabled in iter 9.3 (tuner-targeting Lambda exists)
 
   schedule_expression          = "cron(0 2 ? * SUN *)"
   schedule_expression_timezone = "UTC"
@@ -128,7 +128,7 @@ resource "aws_scheduler_schedule" "tuner_targeting_weekly" {
 resource "aws_scheduler_schedule" "tuner_style_weekly" {
   name       = "tuner-style-weekly"
   group_name = aws_scheduler_schedule_group.pipeline.name
-  state      = "DISABLED"
+  state      = "ENABLED" # enabled in iter 9.3 (tuner-style Lambda exists)
 
   schedule_expression          = "cron(5 2 ? * SUN *)"
   schedule_expression_timezone = "UTC"
@@ -151,7 +151,7 @@ resource "aws_scheduler_schedule" "tuner_style_weekly" {
 resource "aws_scheduler_schedule" "tuner_email_tone_weekly" {
   name       = "tuner-email-tone-weekly"
   group_name = aws_scheduler_schedule_group.pipeline.name
-  state      = "DISABLED"
+  state      = "ENABLED" # enabled in iter 9.3 (tuner-email-tone Lambda exists)
 
   schedule_expression          = "cron(10 2 ? * SUN *)"
   schedule_expression_timezone = "UTC"

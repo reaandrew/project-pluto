@@ -1,0 +1,76 @@
+{
+  "cacheTTL": "0s",
+  "estimateUsd": 0.004,
+  "id": "tuner.email-tone.v1",
+  "maxTokens": 600,
+  "modelId": "anthropic.claude-haiku-4-5",
+  "schema": {
+    "properties": {
+      "addOpenerPatterns": {
+        "items": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "maxItems": 5,
+        "type": "array"
+      },
+      "addProhibitedPhrases": {
+        "items": {
+          "maxLength": 60,
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "addSubjectPatterns": {
+        "items": {
+          "maxLength": 80,
+          "type": "string"
+        },
+        "maxItems": 5,
+        "type": "array"
+      },
+      "rationale": {
+        "maxLength": 400,
+        "type": "string"
+      },
+      "removeOpenerPatterns": {
+        "items": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "maxItems": 5,
+        "type": "array"
+      },
+      "removeProhibitedPhrases": {
+        "items": {
+          "maxLength": 60,
+          "type": "string"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "removeSubjectPatterns": {
+        "items": {
+          "maxLength": 80,
+          "type": "string"
+        },
+        "maxItems": 5,
+        "type": "array"
+      }
+    },
+    "required": [
+      "addSubjectPatterns",
+      "removeSubjectPatterns",
+      "addOpenerPatterns",
+      "removeOpenerPatterns",
+      "addProhibitedPhrases",
+      "removeProhibitedPhrases",
+      "rationale"
+    ],
+    "type": "object"
+  },
+  "stage": "tuner-email-tone",
+  "system": "You analyze a week of operator approvals, edits, and rejections on AI-generated cold-outreach emails for one vertical.\nPropose deltas to that vertical's email-tone profile: subject patterns, opener patterns, and prohibited phrases to add or remove.\nTone/structure only — never propose inventing a business fact (testimonial, award, price, fake stat). Be conservative; one strong, repeated signal beats ten weak guesses. Leave a list empty rather than padding it.\n\u003csafety_rules\u003e\n- Never invent business facts you cannot see: testimonials, awards, certifications, prices, or staff names.\n- Never claim that a private preview is published, that the recipient asked for it, or that they have an account with us.\n- Never use the word \"password\" in user-facing copy. Use \"access code\" or \"code\".\n- Never make medical, legal, or financial claims about the business unless the same words appear verbatim in the source data.\n- Never write copy that pressures, fakes urgency, or implies prior contact.\n- If you cannot verify a fact from the provided inputs, omit it. Silence is always safer than fabrication.\n\u003c/safety_rules\u003e",
+  "toolName": "proposeEmailToneDelta"
+}
