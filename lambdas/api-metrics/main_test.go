@@ -257,3 +257,56 @@ func TestMethodNotAllowed(t *testing.T) {
 		t.Fatalf("status=%d, want 405", resp.StatusCode)
 	}
 }
+
+func TestHandleRollup_ReturnsWindow(t *testing.T) {
+	f := reset(t)
+	f.queryRows = []map[string]dtypes.AttributeValue{
+		{
+			"date":         &dtypes.AttributeValueMemberS{Value: "2026-05-16"},
+			"totalCostUsd": &dtypes.AttributeValueMemberN{Value: "1.75"},
+			"funnel": &dtypes.AttributeValueMemberM{Value: map[string]dtypes.AttributeValue{
+				"emailed":   &dtypes.AttributeValueMemberN{Value: "10"},
+				"responded": &dtypes.AttributeValueMemberN{Value: "4"},
+			}},
+			"perVertical": &dtypes.AttributeValueMemberM{Value: map[string]dtypes.AttributeValue{
+				"accountants": &dtypes.AttributeValueMemberM{Value: map[string]dtypes.AttributeValue{
+					"styleVersion": &dtypes.AttributeValueMemberN{Value: "4"},
+					"toneVersion":  &dtypes.AttributeValueMemberN{Value: "2"},
+					"funnel": &dtypes.AttributeValueMemberM{Value: map[string]dtypes.AttributeValue{
+						"emailed":   &dtypes.AttributeValueMemberN{Value: "7"},
+						"responded": &dtypes.AttributeValueMemberN{Value: "3"},
+					}},
+				}},
+			}},
+		},
+	}
+	resp, _ := handle(context.Background(), operatorReq("GET", "/metrics/rollup", ""))
+	if resp.StatusCode != 200 {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, resp.Body)
+	}
+	var got rollupResponse
+	if err := json.Unmarshal([]byte(resp.Body), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Days) != 1 || got.Days[0].Date != "2026-05-16" || got.Days[0].TotalCost != 1.75 {
+		t.Fatalf("rollup drift: %+v", got)
+	}
+	if got.Days[0].PerVertical["accountants"].StyleVersion != 4 ||
+		got.Days[0].PerVertical["accountants"].Funnel["responded"] != 3 {
+		t.Errorf("per-vertical/version drift: %+v", got.Days[0].PerVertical)
+	}
+	if got.From == "" || got.To == "" {
+		t.Errorf("default window not set: %+v", got)
+	}
+}
+
+func TestHandleRollup_NotOperator403(t *testing.T) {
+	reset(t)
+	r := events.APIGatewayV2HTTPRequest{}
+	r.RequestContext.HTTP.Method = "GET"
+	r.RequestContext.HTTP.Path = "/metrics/rollup"
+	resp, _ := handle(context.Background(), r)
+	if resp.StatusCode != 403 {
+		t.Errorf("status=%d want 403", resp.StatusCode)
+	}
+}

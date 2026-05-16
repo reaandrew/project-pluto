@@ -78,6 +78,15 @@ resource "aws_apigatewayv2_route" "metrics_discoveries_run" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# iter 11.2/11.3 — funnel + cost + per-vertical dashboard window.
+resource "aws_apigatewayv2_route" "metrics_rollup_get" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /metrics/rollup"
+  target             = "integrations/${aws_apigatewayv2_integration.api_metrics.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # Allow api-metrics to invoke the discover Lambda directly. Narrowest
 # possible scope — just one function ARN. When a future Lambda needs
 # similar "trigger this discover from a BFF endpoint" wiring, add it
