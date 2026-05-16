@@ -7,6 +7,7 @@ import { BASENAME } from './api';
 import Callback from './pages/Callback';
 import Candidate from './pages/Candidate';
 import Dashboard from './pages/Dashboard';
+import EmailReview from './pages/EmailReview';
 import Login from './pages/Login';
 import Metrics from './pages/Metrics';
 import Queue from './pages/Queue';
@@ -31,6 +32,7 @@ createRoot(root).render(
             <Route index element={<Dashboard />} />
             <Route path="queue" element={<Queue />} />
             <Route path="queue/:businessId" element={<Candidate />} />
+            <Route path="queue/:businessId/email" element={<EmailReview />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/targeting" element={<Targeting />} />
             <Route path="metrics" element={<Metrics />} />
