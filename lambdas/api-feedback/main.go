@@ -174,17 +174,12 @@ func listByVertical(ctx context.Context, vertical, subject string, limit int32, 
 		if err := attributevalue.UnmarshalMap(raw, &r); err != nil {
 			return nil, "", fmt.Errorf("unmarshal feedback row: %w", err)
 		}
-		items = append(items, feedbackItem{
-			ID:         r.ID,
-			Subject:    r.Subject,
-			SubjectID:  r.SubjectID,
-			BusinessID: r.BusinessID,
-			Actor:      r.Actor,
-			Action:     r.Action,
-			Notes:      r.Notes,
-			Vertical:   r.Vertical,
-			CreatedAt:  r.CreatedAt,
-		})
+		// Field-for-field convertible (only the struct tags differ —
+		// dynamodbav on the row, json on the wire). The conversion is
+		// the privacy boundary: FeedbackRow intentionally has no
+		// originalPayload/editedPayload field, so the bodies can never
+		// reach the response.
+		items = append(items, feedbackItem(r))
 	}
 	next := ""
 	if len(out.LastEvaluatedKey) > 0 {
