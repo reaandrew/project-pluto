@@ -664,3 +664,95 @@ export async function revealPasscode(businessId: string, websiteId: string): Pro
   }
   return ((await res.json()) as { passcode: string }).passcode;
 }
+
+// --- iter 7.3: email review (api-email BFF) ---------------------------
+//
+// The operator IS authorised to see the real draft body (incl. the
+// access code) on the review page — they're the sender. Only the
+// feedback log redacts it (server-side, to {{PASSCODE}}).
+
+export interface EmailDraftView {
+  id: string;
+  websiteId: string;
+  contactId?: string;
+  subject: string;
+  body: string;
+  optOutLine: string;
+  wordCount: number;
+  modelId: string;
+  promptId: string;
+  status: 'draft' | 'approved' | 'rejected' | 'sent';
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CandidateEmailResponse {
+  business: CandidateBusiness;
+  email?: EmailDraftView;
+}
+
+export async function getCandidateEmail(businessId: string): Promise<CandidateEmailResponse> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/email`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from GET ${url}`);
+  }
+  return (await res.json()) as CandidateEmailResponse;
+}
+
+export async function patchEmail(
+  businessId: string,
+  emailId: string,
+  subject: string,
+  body: string,
+  notes?: string
+): Promise<EmailDraftView> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/email/${encodeURIComponent(emailId)}`;
+  const res = await authedFetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject, body, notes }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from PATCH ${url}: ${text}`);
+  }
+  return (await res.json()) as EmailDraftView;
+}
+
+export async function approveEmail(
+  businessId: string,
+  emailId: string,
+  notes?: string
+): Promise<EmailDraftView> {
+  return decideEmail(businessId, emailId, 'approve', notes);
+}
+
+export async function rejectEmail(
+  businessId: string,
+  emailId: string,
+  notes?: string
+): Promise<EmailDraftView> {
+  return decideEmail(businessId, emailId, 'reject', notes);
+}
+
+async function decideEmail(
+  businessId: string,
+  emailId: string,
+  decision: 'approve' | 'reject',
+  notes?: string
+): Promise<EmailDraftView> {
+  const url = `${cfg.bffBaseUrl}/candidates/${encodeURIComponent(businessId)}/email/${encodeURIComponent(emailId)}/${decision}`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes: notes ?? '' }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+  return (await res.json()) as EmailDraftView;
+}

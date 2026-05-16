@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   approveSpec,
   approveWebsite,
@@ -417,6 +417,13 @@ export default function Candidate() {
             </div>
             {webError && website && (
               <p style={{ color: 'crimson', marginTop: '0.5rem' }}>{webError}</p>
+            )}
+            {website.status === 'approved' && (
+              <p style={{ marginTop: '0.75rem' }}>
+                <Link to={`/queue/${encodeURIComponent(businessId ?? '')}/email`}>
+                  Review outreach email →
+                </Link>
+              </p>
             )}
           </>
         )}
