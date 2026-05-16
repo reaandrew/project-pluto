@@ -83,6 +83,8 @@ type captured struct {
 	eventPut   bool
 	msgIndexes []SESMsgIndexRow
 	draftSet   bool
+	cleanupDue int64
+	cleanupBiz string
 	published  pkgevents.Envelope[EmailSentDetail]
 	pubCalled  bool
 }
@@ -112,6 +114,11 @@ func newDeps(t *testing.T, c *captured, draftStatus, contactEmail string, suppre
 			return nil
 		},
 		SetDraftSent: func(context.Context, string, string, string) error { c.draftSet = true; return nil },
+		SetCleanupDue: func(_ context.Context, biz, _ string, due int64) error {
+			c.cleanupBiz = biz
+			c.cleanupDue = due
+			return nil
+		},
 		Publish: func(_ context.Context, env pkgevents.Envelope[EmailSentDetail]) error {
 			c.published = env
 			c.pubCalled = true
@@ -167,6 +174,10 @@ func TestRunOne_HappyPath(t *testing.T) {
 	}
 	if c.msgIndexes[1].PK != "REPLYREF#draft-1" || c.msgIndexes[1].Type != "ReplyRefIndex" || c.msgIndexes[1].BusinessID != "biz-1" || c.msgIndexes[1].ContactID != "con-1" {
 		t.Errorf("reply-ref reverse-index drift: %+v", c.msgIndexes[1])
+	}
+	wantDue := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC).Add(24 * time.Hour).Unix()
+	if c.cleanupBiz != "biz-1" || c.cleanupDue != wantDue {
+		t.Errorf("passcode cleanup-due drift: biz=%q due=%d want=%d", c.cleanupBiz, c.cleanupDue, wantDue)
 	}
 	if !c.pubCalled || c.published.Detail.SESMessageID != "ses-msg-1" {
 		t.Errorf("email.sent not published correctly: %+v", c.published.Detail)

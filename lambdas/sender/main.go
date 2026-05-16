@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,11 +94,14 @@ type runDeps struct {
 	PutEvent     func(ctx context.Context, row EmailEventRow) error
 	PutMsgIndex  func(ctx context.Context, idx SESMsgIndexRow) error
 	SetDraftSent func(ctx context.Context, businessID, draftID, now string) error
-	Publish      func(ctx context.Context, env pkgevents.Envelope[EmailSentDetail]) error
-	CapUSD       func(ctx context.Context) (float64, error)
-	Now          func() time.Time
-	FromAddress  string
-	UnsubBase    string
+	// SetCleanupDue stamps Website.passcodeCleanupDueAt so the iter-8.5
+	// passcode-cleanup sweep wipes the KMS cleartext 24h after send.
+	SetCleanupDue func(ctx context.Context, businessID, websiteID string, dueAtUnix int64) error
+	Publish       func(ctx context.Context, env pkgevents.Envelope[EmailSentDetail]) error
+	CapUSD        func(ctx context.Context) (float64, error)
+	Now           func() time.Time
+	FromAddress   string
+	UnsubBase     string
 }
 
 func handle(ctx context.Context, raw lambdaevents.SQSEvent) (lambdaevents.SQSEventResponse, error) {
@@ -254,6 +258,14 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[EmailApproved
 	if err := d.SetDraftSent(ctx, det.BusinessID, det.DraftID, now); err != nil {
 		return fmt.Errorf("sender: mark draft sent: %w", err)
 	}
+	// Arm the 24h passcode-cleartext cleanup (iter 8.5). Best-effort
+	// stamp on the Website; the sweep is the authority and also has the
+	// passcodeRevealableUntil backstop (iter 8.6), so a failure here
+	// must not fail the send.
+	dueAt := d.Now().Add(24 * time.Hour).Unix()
+	if err := d.SetCleanupDue(ctx, det.BusinessID, det.WebsiteID, dueAt); err != nil {
+		logger.Warn("sender.cleanup_due.stamp_failed", "businessId", det.BusinessID, "websiteId", det.WebsiteID, "err", err.Error())
+	}
 
 	out := pkgevents.New("email.sent", consumerName, EmailSentDetail{
 		BusinessID:   det.BusinessID,
@@ -381,14 +393,15 @@ func buildDeps(ctx context.Context) (runDeps, error) {
 		return runDeps{}, err
 	}
 	return runDeps{
-		GetDraft:     getDraft,
-		GetContact:   getContact,
-		MarkSentOnce: markSentOnce,
-		IsSuppressed: isSuppressedFn(ses),
-		Send:         sendFn(ses, from, configSet),
-		PutEvent:     putEvent,
-		PutMsgIndex:  putMsgIndex,
-		SetDraftSent: setDraftSent,
+		GetDraft:      getDraft,
+		GetContact:    getContact,
+		MarkSentOnce:  markSentOnce,
+		IsSuppressed:  isSuppressedFn(ses),
+		Send:          sendFn(ses, from, configSet),
+		PutEvent:      putEvent,
+		PutMsgIndex:   putMsgIndex,
+		SetDraftSent:  setDraftSent,
+		SetCleanupDue: setCleanupDue,
 		Publish: func(ctx context.Context, env pkgevents.Envelope[EmailSentDetail]) error {
 			return pkgevents.Publish(ctx, publisher, env)
 		},
@@ -564,6 +577,37 @@ func setDraftSent(ctx context.Context, businessID, draftID, now string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("update draft %s status=sent: %w", draftID, err)
+	}
+	return nil
+}
+
+// setCleanupDue stamps Website.passcodeCleanupDueAt (unix seconds) so
+// the iter-8.5 sweep wipes the KMS-encrypted cleartext 24h after the
+// email was sent. Guarded on attribute_exists(pk); a vanished Website
+// is a no-op (CCFE swallowed) — the send already succeeded.
+func setCleanupDue(ctx context.Context, businessID, websiteID string, dueAtUnix int64) error {
+	client, err := ddb.Client(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(ddb.TableName()),
+		Key: map[string]dtypes.AttributeValue{
+			"pk": &dtypes.AttributeValueMemberS{Value: "BUSINESS#" + businessID},
+			"sk": &dtypes.AttributeValueMemberS{Value: "WEBSITE#" + websiteID},
+		},
+		UpdateExpression:    aws.String("SET passcodeCleanupDueAt = :due"),
+		ConditionExpression: aws.String("attribute_exists(pk)"),
+		ExpressionAttributeValues: map[string]dtypes.AttributeValue{
+			":due": &dtypes.AttributeValueMemberN{Value: strconv.FormatInt(dueAtUnix, 10)},
+		},
+	})
+	if err != nil {
+		var ccfe *dtypes.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return nil
+		}
+		return fmt.Errorf("stamp cleanup-due on website %s: %w", websiteID, err)
 	}
 	return nil
 }
