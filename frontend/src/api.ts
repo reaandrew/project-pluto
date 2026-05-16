@@ -836,3 +836,45 @@ export async function reclassifyReply(
     throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
   }
 }
+
+// iter 9.2: the Feedback log. /feedback lists operator
+// Approve/Edit/Reject Feedback rows (per vertical, newest-first); the
+// payload bodies stay on the row (not returned by the list).
+export interface FeedbackItem {
+  id: string;
+  subject: string;
+  subjectId: string;
+  businessId?: string;
+  actor: string;
+  action: string;
+  notes?: string;
+  vertical: string;
+  createdAt: string;
+}
+
+export interface FeedbackResponse {
+  vertical: string;
+  items: FeedbackItem[];
+  nextCursor?: string;
+}
+
+export async function getFeedback(opts?: {
+  vertical?: string;
+  subject?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<FeedbackResponse> {
+  const qs = new URLSearchParams();
+  if (opts?.vertical) qs.set('vertical', opts.vertical);
+  if (opts?.subject) qs.set('subject', opts.subject);
+  if (opts?.limit) qs.set('limit', String(opts.limit));
+  if (opts?.cursor) qs.set('cursor', opts.cursor);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  const url = `${cfg.bffBaseUrl}/feedback${suffix}`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from GET ${url}: ${text}`);
+  }
+  return (await res.json()) as FeedbackResponse;
+}

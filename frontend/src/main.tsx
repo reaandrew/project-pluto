@@ -8,6 +8,7 @@ import Callback from './pages/Callback';
 import Candidate from './pages/Candidate';
 import Dashboard from './pages/Dashboard';
 import EmailReview from './pages/EmailReview';
+import Feedback from './pages/Feedback';
 import Login from './pages/Login';
 import Metrics from './pages/Metrics';
 import Queue from './pages/Queue';
@@ -35,6 +36,7 @@ createRoot(root).render(
             <Route path="queue/:businessId" element={<Candidate />} />
             <Route path="queue/:businessId/email" element={<EmailReview />} />
             <Route path="replies" element={<Replies />} />
+            <Route path="feedback" element={<Feedback />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/targeting" element={<Targeting />} />
             <Route path="metrics" element={<Metrics />} />
