@@ -44,6 +44,9 @@ export default function App() {
         <NavLink to="/replies" style={navStyle}>
           Replies
         </NavLink>
+        <NavLink to="/feedback" style={navStyle}>
+          Feedback
+        </NavLink>
         <NavLink to="/metrics" style={navStyle}>
           Metrics
         </NavLink>
