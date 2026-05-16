@@ -81,6 +81,7 @@ type captured struct {
 	markerKey  string
 	eventRow   EmailEventRow
 	eventPut   bool
+	msgIndex   SESMsgIndexRow
 	draftSet   bool
 	published  pkgevents.Envelope[EmailSentDetail]
 	pubCalled  bool
@@ -106,6 +107,7 @@ func newDeps(t *testing.T, c *captured, draftStatus, contactEmail string, suppre
 			return "ses-msg-1", nil
 		},
 		PutEvent:     func(_ context.Context, row EmailEventRow) error { c.eventRow = row; c.eventPut = true; return nil },
+		PutMsgIndex:  func(_ context.Context, idx SESMsgIndexRow) error { c.msgIndex = idx; return nil },
 		SetDraftSent: func(context.Context, string, string, string) error { c.draftSet = true; return nil },
 		Publish: func(_ context.Context, env pkgevents.Envelope[EmailSentDetail]) error {
 			c.published = env
@@ -152,6 +154,9 @@ func TestRunOne_HappyPath(t *testing.T) {
 	}
 	if !c.draftSet {
 		t.Error("draft status not flipped to sent")
+	}
+	if c.msgIndex.PK != "SESMSG#ses-msg-1" || c.msgIndex.BusinessID != "biz-1" || c.msgIndex.DraftID != "draft-1" {
+		t.Errorf("SES msg reverse-index drift: %+v", c.msgIndex)
 	}
 	if !c.pubCalled || c.published.Detail.SESMessageID != "ses-msg-1" {
 		t.Errorf("email.sent not published correctly: %+v", c.published.Detail)
