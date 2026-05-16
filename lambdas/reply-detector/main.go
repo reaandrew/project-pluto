@@ -92,9 +92,9 @@ func handle(ctx context.Context, evt lambdaevents.S3Event) error {
 	}
 	for _, r := range evt.Records {
 		if perr := processRecord(ctx, deps, r.S3.Bucket.Name, r.S3.Object.Key); perr != nil {
-			// Return on first hard error so the async invoke retries
-			// (then routes to the on-failure DLQ) — a customer reply
-			// must not be silently lost.
+			// Return on first hard error so the async invoke retries;
+			// the raw object also persists in the inbound bucket for
+			// the 90-day lifecycle, so a reply is never silently lost.
 			return perr
 		}
 	}

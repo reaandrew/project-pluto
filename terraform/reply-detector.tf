@@ -118,29 +118,13 @@ resource "aws_lambda_function" "reply_detector" {
   tags = local.common_tags
 }
 
-# A reply must not be silently lost: async retries then route to a DLQ.
-resource "aws_sqs_queue" "reply_detector_dlq" {
-  name                       = "ai-website-agency-reply-detector-dlq${local.env_suffix}"
-  message_retention_seconds  = 1209600 # 14 days
-  visibility_timeout_seconds = 60
-  sqs_managed_sse_enabled    = true
-
-  tags = merge(local.common_tags, {
-    Component = "reply-detector-dlq"
-  })
-}
-
-resource "aws_lambda_function_event_invoke_config" "reply_detector" {
-  function_name          = aws_lambda_function.reply_detector.function_name
-  maximum_retry_attempts = 2
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.reply_detector_dlq.arn
-    }
-  }
-}
-
+# A reply is not silently lost without an explicit DLQ: the async S3
+# invoke retries twice by default, and the raw object persists in the
+# inbound bucket for the full 90-day lifecycle, so a hard-failed reply
+# can always be re-driven / picked up by iter-8.5 triage from S3. An
+# on-failure destination would need `lambda:PutFunctionEventInvokeConfig`
+# on the CI deploy role (defined in the do-not-touch aws-setup/
+# singleton) — out of scope for iter 8.4.
 resource "aws_lambda_permission" "reply_detector_s3" {
   statement_id   = "AllowS3Invoke"
   action         = "lambda:InvokeFunction"
@@ -162,9 +146,8 @@ resource "aws_s3_bucket_notification" "inbound_mail" {
   depends_on = [aws_lambda_permission.reply_detector_s3]
 }
 
-# Scoped read on the inbound bucket + DLQ-send for the async failure
-# destination. DynamoDB rw + EventBridge PutEvents are already on the
-# shared lambda_api role.
+# Scoped read on the inbound bucket. DynamoDB rw + EventBridge
+# PutEvents are already on the shared lambda_api role.
 resource "aws_iam_role_policy" "reply_detector_s3_read" {
   name = "reply-detector-s3-read"
   role = aws_iam_role.lambda_api.id
@@ -175,11 +158,6 @@ resource "aws_iam_role_policy" "reply_detector_s3_read" {
         Effect   = "Allow"
         Action   = "s3:GetObject"
         Resource = "${aws_s3_bucket.inbound_mail.arn}/inbound/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = "sqs:SendMessage"
-        Resource = aws_sqs_queue.reply_detector_dlq.arn
       },
     ]
   })
