@@ -32,7 +32,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -139,32 +138,30 @@ type runDeps struct {
 	ReplyDomain    string
 }
 
-// s3EBDetail is the EventBridge "Object Created" (source aws.s3)
-// detail. The inbound bucket fans out via EventBridge because S3
-// forbids two direct notification destinations sharing a prefix.
-type s3EBDetail struct {
-	Bucket struct {
-		Name string `json:"name"`
-	} `json:"bucket"`
-	Object struct {
-		Key string `json:"key"`
-	} `json:"object"`
+// ReplyReceivedDetail mirrors reply-detector's pipeline `reply.received`
+// payload — just the S3 location of the raw inbound MIME.
+type ReplyReceivedDetail struct {
+	Bucket string `json:"bucket"`
+	Key    string `json:"key"`
 }
 
-func handle(ctx context.Context, evt lambdaevents.EventBridgeEvent) error {
+// handle is a standard pipeline-bus SQS consumer of `reply.received`
+// (reply-detector is the sole S3 consumer and republishes it). NOT
+// kill-switch gated — inbound compliance must run even when outreach
+// is paused; the paid Bedrock call is still cost-capped in Classify.
+func handle(ctx context.Context, raw lambdaevents.SQSEvent) (lambdaevents.SQSEventResponse, error) {
 	deps, err := buildDeps(ctx)
 	if err != nil {
-		return err
+		return lambdaevents.SQSEventResponse{}, err
 	}
-	var d s3EBDetail
-	if err := json.Unmarshal(evt.Detail, &d); err != nil {
-		return fmt.Errorf("decode S3 EventBridge detail: %w", err)
-	}
-	if d.Bucket.Name == "" || d.Object.Key == "" {
-		applog.FromContext(ctx).Warn("reply_triage.empty_event")
-		return nil
-	}
-	return processRecord(ctx, deps, d.Bucket.Name, d.Object.Key) // async retry; object persists in S3
+	return pkgevents.Consume[ReplyReceivedDetail](ctx, raw,
+		func(ctx context.Context, env pkgevents.Envelope[ReplyReceivedDetail]) error {
+			if env.Detail.Bucket == "" || env.Detail.Key == "" {
+				applog.FromContext(ctx).Warn("reply_triage.empty_event", "eventId", env.EventID)
+				return nil
+			}
+			return processRecord(ctx, deps, env.Detail.Bucket, env.Detail.Key)
+		})
 }
 
 func processRecord(ctx context.Context, d runDeps, bucket, key string) error {

@@ -23,7 +23,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -67,6 +66,14 @@ type ReplyDetail struct {
 	RepliedAt  string `json:"repliedAt"`
 }
 
+// ReplyReceivedDetail is the pipeline `reply.received` payload — just
+// the S3 location of the raw inbound MIME so reply-triage (iter 8.5)
+// can fetch + classify it. No reply content travels in the event.
+type ReplyReceivedDetail struct {
+	Bucket string `json:"bucket"`
+	Key    string `json:"key"`
+}
+
 type EmailEventRow struct {
 	PK         string `dynamodbav:"pk"`
 	SK         string `dynamodbav:"sk"`
@@ -82,40 +89,29 @@ type runDeps struct {
 	MarkResponded func(ctx context.Context, businessID, now string) error
 	PutEvent      func(ctx context.Context, row EmailEventRow) error
 	Publish       func(ctx context.Context, d ReplyDetail) error
-	Now           func() time.Time
-	ReplyDomain   string
+	// PublishReceived emits the pipeline `reply.received {bucket,key}`
+	// event that the iter-8.5 reply-triage SQS consumer feeds on. It is
+	// published for EVERY parseable inbound reply (even unattributed
+	// ones) so triage sees them too.
+	PublishReceived func(ctx context.Context, bucket, key string) error
+	Now             func() time.Time
+	ReplyDomain     string
 }
 
-// s3EBDetail is the EventBridge "Object Created" (source aws.s3)
-// detail. The inbound bucket fans out via EventBridge because S3
-// forbids two direct notification destinations sharing a prefix
-// (reply-detector + reply-triage both consume inbound/).
-type s3EBDetail struct {
-	Bucket struct {
-		Name string `json:"name"`
-	} `json:"bucket"`
-	Object struct {
-		Key string `json:"key"`
-	} `json:"object"`
-}
-
-func handle(ctx context.Context, evt lambdaevents.EventBridgeEvent) error {
+func handle(ctx context.Context, evt lambdaevents.S3Event) error {
 	deps, err := buildDeps(ctx)
 	if err != nil {
 		return err
 	}
-	var d s3EBDetail
-	if err := json.Unmarshal(evt.Detail, &d); err != nil {
-		return fmt.Errorf("decode S3 EventBridge detail: %w", err)
+	for _, r := range evt.Records {
+		if perr := processRecord(ctx, deps, r.S3.Bucket.Name, r.S3.Object.Key); perr != nil {
+			// Return on first hard error so the async S3 invoke retries;
+			// the raw object also persists in the inbound bucket for the
+			// 90-day lifecycle, so a reply is never silently lost.
+			return perr
+		}
 	}
-	if d.Bucket.Name == "" || d.Object.Key == "" {
-		applog.FromContext(ctx).Warn("reply.empty_event")
-		return nil
-	}
-	// Return a hard error so EventBridge retries; the raw object also
-	// persists in the inbound bucket for the 90-day lifecycle, so a
-	// reply is never silently lost.
-	return processRecord(ctx, deps, d.Bucket.Name, d.Object.Key)
+	return nil
 }
 
 func processRecord(ctx context.Context, d runDeps, bucket, key string) error {
@@ -145,6 +141,13 @@ func runOne(ctx context.Context, d runDeps, bucket, key string) error {
 		// in S3 for manual inspection). No content logged.
 		logger.Warn("reply.unparseable")
 		return nil
+	}
+
+	// Hand off to reply-triage (iter 8.5) for EVERY parseable reply,
+	// independent of attribution — published before the unattributed
+	// early-returns so the operator inbox still sees orphan replies.
+	if err := d.PublishReceived(ctx, bucket, key); err != nil {
+		return fmt.Errorf("publish reply.received: %w", err)
 	}
 
 	draftID := extractDraftID(msg.Header, d.ReplyDomain)
@@ -265,6 +268,10 @@ func buildDeps(ctx context.Context) (runDeps, error) {
 		PutEvent:      putEvent,
 		Publish: func(ctx context.Context, det ReplyDetail) error {
 			return pkgevents.Publish(ctx, publisher, pkgevents.New("email.replied", consumerName, det))
+		},
+		PublishReceived: func(ctx context.Context, bucket, key string) error {
+			return pkgevents.Publish(ctx, publisher,
+				pkgevents.New("reply.received", consumerName, ReplyReceivedDetail{Bucket: bucket, Key: key}))
 		},
 		Now:         time.Now,
 		ReplyDomain: replyDomain,
