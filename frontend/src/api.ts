@@ -756,3 +756,23 @@ async function decideEmail(
   }
   return (await res.json()) as EmailDraftView;
 }
+
+// --- iter 8.1: SES domain-verification status -------------------------
+
+export interface EmailStatus {
+  identity: string;
+  verifiedForSending: boolean;
+  dkimStatus: string;
+  dkimSigningEnabled: boolean;
+  mailFromDomain?: string;
+  mailFromDomainStatus?: string;
+}
+
+export async function getEmailStatus(): Promise<EmailStatus> {
+  const url = `${cfg.bffBaseUrl}/email/status`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from GET ${url}`);
+  }
+  return (await res.json()) as EmailStatus;
+}

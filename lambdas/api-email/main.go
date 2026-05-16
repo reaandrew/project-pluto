@@ -38,6 +38,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	dtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 
 	"github.com/reaandrew/ai-website-agency/lambdas/pkg/auth"
 	"github.com/reaandrew/ai-website-agency/lambdas/pkg/config"
@@ -106,6 +107,8 @@ func handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 	emailID := req.PathParameters["emailId"]
 
 	switch {
+	case method == "GET" && businessID == "" && strings.HasSuffix(path, "/email/status"):
+		return handleEmailStatus(ctx, logger)
 	case method == "GET" && emailID == "":
 		return handleGetEmail(ctx, logger, businessID)
 	case method == "PATCH" && emailID != "":
@@ -143,6 +146,46 @@ func handleGetEmail(ctx context.Context, logger *slog.Logger, businessID string)
 	resp := emailResponse{Business: *biz, Email: latest}
 	body, _ := json.Marshal(resp)
 	return httpresp.JSON(200, string(body)), nil
+}
+
+// --- GET /email/status (iter 8.1) -------------------------------------
+//
+// Surfaces SES domain-identity verification status for the operator's
+// /settings/email panel ("DKIM/SPF checks live" per 08-admin-ui.md).
+// Read-only; no SES send. The identity is the project-global
+// outreach.<base_domain> singleton (terraform/ses.tf, prod-only).
+
+type emailStatusResponse struct {
+	Identity             string `json:"identity"`
+	VerifiedForSending   bool   `json:"verifiedForSending"`
+	DKIMStatus           string `json:"dkimStatus"`
+	DKIMSigningEnabled   bool   `json:"dkimSigningEnabled"`
+	MailFromDomain       string `json:"mailFromDomain,omitempty"`
+	MailFromDomainStatus string `json:"mailFromDomainStatus,omitempty"`
+}
+
+func handleEmailStatus(ctx context.Context, logger *slog.Logger) (events.APIGatewayV2HTTPResponse, error) {
+	identity := os.Getenv("SES_OUTREACH_IDENTITY")
+	if identity == "" {
+		return httpresp.Error(500, "SES_OUTREACH_IDENTITY is not set"), nil
+	}
+	status, err := sesStatusProvider(ctx, identity)
+	if err != nil {
+		// SES identity is a prod-only singleton — in a per-PR env it
+		// won't exist. Report that plainly rather than 5xx-ing.
+		logger.Info("api-email.ses_status.unavailable", "err", err.Error())
+		return httpresp.JSON(200, mustJSON(emailStatusResponse{
+			Identity:           identity,
+			VerifiedForSending: false,
+			DKIMStatus:         "UNKNOWN",
+		})), nil
+	}
+	return httpresp.JSON(200, mustJSON(status)), nil
+}
+
+func mustJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 // --- PATCH (edit) ------------------------------------------------------
@@ -463,11 +506,42 @@ func captureFeedback(ctx context.Context, in feedback.CaptureInput) error {
 // --- AWS wiring (lazy) -------------------------------------------------
 
 var (
-	cachedPublisher *pkgevents.Publisher
-	nowFunc         = func() time.Time { return time.Now().UTC() }
-	randomHexFn     = defaultRandomHex
-	decryptProvider = defaultDecryptProvider
+	cachedPublisher   *pkgevents.Publisher
+	nowFunc           = func() time.Time { return time.Now().UTC() }
+	randomHexFn       = defaultRandomHex
+	decryptProvider   = defaultDecryptProvider
+	sesStatusProvider = defaultSESStatus
 )
+
+// defaultSESStatus calls SESv2 GetEmailIdentity for the outreach
+// domain singleton and projects the verification + DKIM + MAIL FROM
+// status. Read-only (sesv2:GetEmailIdentity).
+func defaultSESStatus(ctx context.Context, identity string) (emailStatusResponse, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		return emailStatusResponse{}, fmt.Errorf("api-email: AWS config: %w", err)
+	}
+	out, err := sesv2.NewFromConfig(cfg).GetEmailIdentity(ctx, &sesv2.GetEmailIdentityInput{
+		EmailIdentity: aws.String(identity),
+	})
+	if err != nil {
+		return emailStatusResponse{}, fmt.Errorf("api-email: GetEmailIdentity: %w", err)
+	}
+	resp := emailStatusResponse{
+		Identity:           identity,
+		VerifiedForSending: out.VerifiedForSendingStatus,
+		DKIMStatus:         "UNKNOWN",
+	}
+	if out.DkimAttributes != nil {
+		resp.DKIMStatus = string(out.DkimAttributes.Status)
+		resp.DKIMSigningEnabled = out.DkimAttributes.SigningEnabled
+	}
+	if out.MailFromAttributes != nil {
+		resp.MailFromDomain = aws.ToString(out.MailFromAttributes.MailFromDomain)
+		resp.MailFromDomainStatus = string(out.MailFromAttributes.MailFromDomainStatus)
+	}
+	return resp, nil
+}
 
 func publisherProvider(ctx context.Context) (*pkgevents.Publisher, error) {
 	if cachedPublisher != nil {

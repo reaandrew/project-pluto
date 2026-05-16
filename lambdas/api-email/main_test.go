@@ -336,6 +336,68 @@ func TestHandle_Approve_BlanksBodyWhenCipherUnavailable(t *testing.T) {
 	}
 }
 
+// --- iter 8.1: GET /email/status --------------------------------------
+
+func TestHandle_EmailStatus_HappyPath(t *testing.T) {
+	setup(t)
+	t.Setenv("SES_OUTREACH_IDENTITY", "outreach.example.com")
+	sesStatusProvider = func(_ context.Context, identity string) (emailStatusResponse, error) {
+		return emailStatusResponse{
+			Identity: identity, VerifiedForSending: true,
+			DKIMStatus: "SUCCESS", DKIMSigningEnabled: true,
+			MailFromDomain: "mail.outreach.example.com", MailFromDomainStatus: "SUCCESS",
+		}, nil
+	}
+	t.Cleanup(func() { sesStatusProvider = defaultSESStatus })
+
+	resp, _ := handle(context.Background(), makeReq("GET", "/email/status", "", map[string]string{}))
+	if resp.StatusCode != 200 {
+		t.Fatalf("status=%d (%s)", resp.StatusCode, resp.Body)
+	}
+	if !strings.Contains(resp.Body, `"verifiedForSending":true`) ||
+		!strings.Contains(resp.Body, `"dkimStatus":"SUCCESS"`) {
+		t.Errorf("status response drift: %s", resp.Body)
+	}
+}
+
+func TestHandle_EmailStatus_UnavailableDegradesGracefully(t *testing.T) {
+	setup(t)
+	t.Setenv("SES_OUTREACH_IDENTITY", "outreach.example.com")
+	sesStatusProvider = func(context.Context, string) (emailStatusResponse, error) {
+		return emailStatusResponse{}, context.DeadlineExceeded // e.g. per-PR env: no identity
+	}
+	t.Cleanup(func() { sesStatusProvider = defaultSESStatus })
+
+	resp, _ := handle(context.Background(), makeReq("GET", "/email/status", "", map[string]string{}))
+	if resp.StatusCode != 200 {
+		t.Fatalf("status=%d want 200 (graceful), body=%s", resp.StatusCode, resp.Body)
+	}
+	if !strings.Contains(resp.Body, `"verifiedForSending":false`) ||
+		!strings.Contains(resp.Body, `"dkimStatus":"UNKNOWN"`) {
+		t.Errorf("expected graceful UNKNOWN status, got: %s", resp.Body)
+	}
+}
+
+func TestHandle_EmailStatus_500WhenIdentityEnvMissing(t *testing.T) {
+	setup(t)
+	t.Setenv("SES_OUTREACH_IDENTITY", "")
+	resp, _ := handle(context.Background(), makeReq("GET", "/email/status", "", map[string]string{}))
+	if resp.StatusCode != 500 {
+		t.Errorf("status=%d want 500", resp.StatusCode)
+	}
+}
+
+func TestHandle_EmailStatus_403WhenNotOperator(t *testing.T) {
+	setup(t)
+	r := events.APIGatewayV2HTTPRequest{}
+	r.RequestContext.HTTP.Method = "GET"
+	r.RequestContext.HTTP.Path = "/email/status"
+	resp, _ := handle(context.Background(), r)
+	if resp.StatusCode != 403 {
+		t.Errorf("status=%d want 403", resp.StatusCode)
+	}
+}
+
 func TestHandle_405Default(t *testing.T) {
 	setup(t)
 	resp, _ := handle(context.Background(), makeReq("DELETE", "/candidates/biz-1/email/draft-1", "",
