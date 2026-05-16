@@ -32,6 +32,16 @@ provider "aws" {
   }
 }
 
+# Tag-free provider for the few resources the CI deploy role may NOT
+# tag. The github-actions role (aws-setup/, do-not-touch) only allows
+# events:TagResource on custom-pipeline-bus rule ARNs, so a default-bus
+# rule must be created without provider default_tags (which would
+# otherwise force a TagResource call).
+provider "aws" {
+  alias  = "untagged"
+  region = var.aws_region
+}
+
 variable "aws_region" {
   type        = string
   default     = "eu-west-2"

@@ -137,6 +137,10 @@ resource "aws_s3_bucket_notification" "inbound_mail" {
 }
 
 resource "aws_cloudwatch_event_rule" "inbound_mail" {
+  # Tag-free provider: this rule is on the DEFAULT event bus and the CI
+  # deploy role may not events:TagResource it (see provider comment in
+  # main.tf). default_tags would otherwise force a TagResource call.
+  provider    = aws.untagged
   name        = "ai-website-agency-inbound-mail${local.env_suffix}"
   description = "SES inbound replies landed in S3 → reply-detector + reply-triage"
 
