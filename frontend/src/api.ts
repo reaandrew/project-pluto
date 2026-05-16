@@ -776,3 +776,63 @@ export async function getEmailStatus(): Promise<EmailStatus> {
   }
   return (await res.json()) as EmailStatus;
 }
+
+// iter 8.5.3: reply-triage operator inbox. /replies lists ReplyTriage
+// items (default the operator_inbox) so the operator can manually
+// reclassify what the model wasn't confident about.
+export interface ReplyItem {
+  ref: string;
+  id: string;
+  businessId?: string;
+  category: string;
+  confidence: number;
+  rationale: string;
+  excerpt: string;
+  triageState: string;
+  createdAt: string;
+}
+
+export interface RepliesResponse {
+  status: string;
+  items: ReplyItem[];
+  nextCursor?: string;
+}
+
+export async function getReplies(opts?: {
+  status?: string;
+  category?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<RepliesResponse> {
+  const qs = new URLSearchParams();
+  if (opts?.status) qs.set('status', opts.status);
+  if (opts?.category) qs.set('category', opts.category);
+  if (opts?.limit) qs.set('limit', String(opts.limit));
+  if (opts?.cursor) qs.set('cursor', opts.cursor);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  const url = `${cfg.bffBaseUrl}/replies${suffix}`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from GET ${url}: ${text}`);
+  }
+  return (await res.json()) as RepliesResponse;
+}
+
+export async function reclassifyReply(
+  id: string,
+  ref: string,
+  newCategory: string,
+  notes?: string
+): Promise<void> {
+  const url = `${cfg.bffBaseUrl}/replies/${encodeURIComponent(id)}/reclassify`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, newCategory, notes: notes ?? '' }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+}

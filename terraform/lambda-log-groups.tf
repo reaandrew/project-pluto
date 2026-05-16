@@ -182,3 +182,10 @@ resource "aws_cloudwatch_log_group" "reply_triage" {
   retention_in_days = 30
   tags              = local.common_tags
 }
+
+# nosemgrep: terraform.aws.security.aws-cloudwatch-log-group-unencrypted.aws-cloudwatch-log-group-unencrypted
+resource "aws_cloudwatch_log_group" "api_replies" {
+  name              = "/aws/lambda/ai-website-agency-api-replies${local.env_suffix}"
+  retention_in_days = 30
+  tags              = local.common_tags
+}
