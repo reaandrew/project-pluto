@@ -93,6 +93,37 @@ func validInput() CaptureInput {
 	}
 }
 
+// TestCapture_ProfileSubject_AllowsEmptyBusinessID covers the iter-9.4
+// contract relaxation: a profile-tuning audit row is vertical-scoped,
+// so SubjectProfile + ActionApply + empty BusinessID must validate and
+// persist (every other subject still requires a businessId — see
+// TestCapture_RejectsInvalid).
+func TestCapture_ProfileSubject_AllowsEmptyBusinessID(t *testing.T) {
+	d, pub, _ := setupHarness(t)
+	in := CaptureInput{
+		Subject:   SubjectProfile,
+		SubjectID: "delta-1",
+		Actor:     "cog-abc",
+		Action:    ActionApply,
+		Vertical:  "accountants",
+		Notes:     "applied style tuner delta (v4)",
+		// BusinessID intentionally empty.
+	}
+	row, _, err := Capture(context.Background(), in, pub)
+	if err != nil {
+		t.Fatalf("profile-subject feedback must validate without businessId: %v", err)
+	}
+	if row.Subject != SubjectProfile || row.Action != ActionApply || row.BusinessID != "" {
+		t.Errorf("row drift: %+v", row)
+	}
+	if row.PK != "FEEDBACK#accountants" {
+		t.Errorf("profile feedback must land in the vertical partition, got %q", row.PK)
+	}
+	if len(d.puts) != 1 {
+		t.Errorf("expected the audit row to be persisted, got %d puts", len(d.puts))
+	}
+}
+
 // --- happy path --------------------------------------------------------
 
 func TestCapture_PersistsRowAndPublishesEvent(t *testing.T) {

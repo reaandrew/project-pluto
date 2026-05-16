@@ -878,3 +878,60 @@ export async function getFeedback(opts?: {
   }
   return (await res.json()) as FeedbackResponse;
 }
+
+// iter 9.4: tuner-delta review. /tuners lists PENDING TunerDeltas the
+// weekly tuners proposed; the operator applies (mutates the live
+// profile + bumps version) or dismisses. No auto-apply.
+export interface TunerItem {
+  ref: string;
+  id: string;
+  kind: string;
+  vertical: string;
+  status: string;
+  rationale: string;
+  proposed: unknown;
+  promptId: string;
+  createdAt: string;
+}
+
+export interface TunersResponse {
+  status: string;
+  items: TunerItem[];
+}
+
+export async function getTuners(status?: string): Promise<TunersResponse> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : '';
+  const url = `${cfg.bffBaseUrl}/tuners${suffix}`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from GET ${url}: ${text}`);
+  }
+  return (await res.json()) as TunersResponse;
+}
+
+async function decideTuner(
+  id: string,
+  ref: string,
+  decision: 'apply' | 'dismiss',
+  reason?: string
+): Promise<void> {
+  const url = `${cfg.bffBaseUrl}/tuners/${encodeURIComponent(id)}/${decision}`;
+  const res = await authedFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, reason: reason ?? '' }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from POST ${url}: ${text}`);
+  }
+}
+
+export async function applyTuner(id: string, ref: string): Promise<void> {
+  return decideTuner(id, ref, 'apply');
+}
+
+export async function dismissTuner(id: string, ref: string, reason?: string): Promise<void> {
+  return decideTuner(id, ref, 'dismiss', reason);
+}
