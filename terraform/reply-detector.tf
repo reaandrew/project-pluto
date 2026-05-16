@@ -143,7 +143,19 @@ resource "aws_s3_bucket_notification" "inbound_mail" {
     filter_prefix       = "inbound/"
   }
 
-  depends_on = [aws_lambda_permission.reply_detector_s3]
+  # iter 8.5.1 — reply-triage is a second consumer of the same events
+  # (only one aws_s3_bucket_notification is allowed per bucket, so its
+  # subscription is declared here alongside reply-detector's).
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.reply_triage.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "inbound/"
+  }
+
+  depends_on = [
+    aws_lambda_permission.reply_detector_s3,
+    aws_lambda_permission.reply_triage_s3,
+  ]
 }
 
 # Scoped read on the inbound bucket. DynamoDB rw + EventBridge
