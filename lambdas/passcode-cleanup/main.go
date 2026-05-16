@@ -1,12 +1,22 @@
-// Package main is the passcode-cleanup Lambda (iter 8.5). An hourly
-// EventBridge Scheduler invokes it; it wipes the KMS-encrypted
-// passcode cleartext (Website.passcodeCipher) ~24h after the outreach
-// email was sent.
+// Package main is the passcode-cleanup Lambda (iter 8.5 + 8.6). An
+// hourly EventBridge Scheduler invokes it; it wipes the KMS-encrypted
+// passcode cleartext (Website.passcodeCipher) when either trigger has
+// passed:
 //
-// The sender (iter 8.2) stamps Website.passcodeCleanupDueAt = sentAt +
-// 24h. This sweep finds Websites whose due time has passed and that
-// still carry a passcodeCipher, REMOVEs the cipher (+ the due marker),
-// and publishes preview.passcode.cleartext_wiped.
+//   - iter 8.5 "sent_24h": the sender (iter 8.2) stamps
+//     Website.passcodeCleanupDueAt = sentAt + 24h on send; the sweep
+//     wipes 24h after the outreach email went out.
+//   - iter 8.6 "revealable_expired": the publisher sets
+//     passcodeRevealableUntil = publishedAt + 7d; the sweep wipes once
+//     that passes EVEN IF no email was ever sent (forces a
+//     regenerate-and-resend if the operator sat on the candidate).
+//
+// (Hourly more than satisfies the spec's "daily" TTL sweep — one
+// Lambda + one schedule rather than a separate daily job.)
+//
+// The sweep finds Websites matching either trigger that still carry a
+// passcodeCipher, REMOVEs the cipher (+ the due marker), and publishes
+// preview.passcode.cleartext_wiped with the attributed reason.
 //
 // Only passcodeCipher is touched — passcodeHash and the Cloudflare KV
 // mapping are left intact, so the recipient's preview link keeps
@@ -14,11 +24,10 @@
 // away (they regenerate to resend).
 //
 // Privacy: the cleartext is NEVER read, logged, or emitted. The sweep
-// projects only pk/sk, REMOVEs the attribute blind, and the event
-// carries ids only. NOT kill-switch gated — this is a privacy/
-// retention guarantee that must run regardless of outreach state.
-// iter 8.6 extends the same sweep with the passcodeRevealableUntil
-// backstop.
+// projects only pk/sk + the two non-secret timestamp markers, REMOVEs
+// the cipher blind, and the event carries ids only. NOT kill-switch
+// gated — this is a privacy/retention guarantee that must run
+// regardless of outreach state.
 package main
 
 import (
@@ -47,6 +56,11 @@ const consumerName = "passcode-cleanup"
 type websiteRef struct {
 	BusinessID string
 	WebsiteID  string
+	// Reason why this Website is being wiped: "sent_24h" (iter 8.5 —
+	// 24h after email.sent) or "revealable_expired" (iter 8.6 — the
+	// passcodeRevealableUntil backstop fired even though no email was
+	// sent, forcing a regenerate-and-resend).
+	Reason string
 }
 
 // WipedDetail is the preview.passcode.cleartext_wiped payload — ids
@@ -59,8 +73,9 @@ type WipedDetail struct {
 }
 
 type runDeps struct {
-	// ScanDue returns Websites whose passcodeCleanupDueAt has passed
-	// and that still have a passcodeCipher.
+	// ScanDue returns Websites that still have a passcodeCipher and
+	// whose passcodeCleanupDueAt OR passcodeRevealableUntil has passed,
+	// each tagged with the attributed wipe Reason.
 	ScanDue func(ctx context.Context, nowUnix int64) ([]websiteRef, error)
 	// Wipe REMOVEs passcodeCipher (+ the due marker). Returns false if
 	// the cipher was already gone (concurrent run / nothing to do).
@@ -101,7 +116,7 @@ func sweep(ctx context.Context, d runDeps, logger *slog.Logger) error {
 		if perr := d.Publish(ctx, WipedDetail{
 			BusinessID: ref.BusinessID,
 			WebsiteID:  ref.WebsiteID,
-			Reason:     "sent_24h",
+			Reason:     ref.Reason,
 			WipedAt:    nowRFC,
 		}); perr != nil {
 			logger.Error("passcode_cleanup.publish_failed", "businessId", ref.BusinessID, "websiteId", ref.WebsiteID, "err", perr.Error())
@@ -149,10 +164,14 @@ func scanDue(ctx context.Context, nowUnix int64) ([]websiteRef, error) {
 	for {
 		out, err := client.Scan(ctx, &dynamodb.ScanInput{
 			TableName: aws.String(ddb.TableName()),
-			// Project ONLY the keys — never pull passcodeCipher into
-			// process memory.
-			ProjectionExpression:     aws.String("pk, sk"),
-			FilterExpression:         aws.String("#t = :w AND attribute_exists(passcodeCipher) AND passcodeCleanupDueAt <= :now"),
+			// Project the keys + the two NON-secret timestamp markers
+			// (never passcodeCipher) so we can attribute the wipe
+			// reason. A Website is due when the 24h-post-send marker
+			// has passed (iter 8.5) OR its publish-time
+			// passcodeRevealableUntil backstop has passed even though
+			// no email was sent (iter 8.6).
+			ProjectionExpression:     aws.String("pk, sk, passcodeCleanupDueAt, passcodeRevealableUntil"),
+			FilterExpression:         aws.String("#t = :w AND attribute_exists(passcodeCipher) AND (passcodeCleanupDueAt <= :now OR passcodeRevealableUntil <= :now)"),
 			ExpressionAttributeNames: map[string]string{"#t": "type"},
 			ExpressionAttributeValues: map[string]dtypes.AttributeValue{
 				":w":   &dtypes.AttributeValueMemberS{Value: "Website"},
@@ -172,6 +191,7 @@ func scanDue(ctx context.Context, nowUnix int64) ([]websiteRef, error) {
 			refs = append(refs, websiteRef{
 				BusinessID: strings.TrimPrefix(pk.Value, "BUSINESS#"),
 				WebsiteID:  strings.TrimPrefix(sk.Value, "WEBSITE#"),
+				Reason:     wipeReason(it, nowUnix),
 			})
 		}
 		if len(out.LastEvaluatedKey) == 0 {
@@ -179,6 +199,19 @@ func scanDue(ctx context.Context, nowUnix int64) ([]websiteRef, error) {
 		}
 		lastKey = out.LastEvaluatedKey
 	}
+}
+
+// wipeReason attributes the wipe from the projected (non-secret)
+// timestamps. The Scan filter guarantees at least one branch matched,
+// so anything not explained by the 24h-post-send marker is the
+// passcodeRevealableUntil backstop.
+func wipeReason(item map[string]dtypes.AttributeValue, nowUnix int64) string {
+	if n, ok := item["passcodeCleanupDueAt"].(*dtypes.AttributeValueMemberN); ok {
+		if v, err := strconv.ParseInt(n.Value, 10, 64); err == nil && v <= nowUnix {
+			return "sent_24h"
+		}
+	}
+	return "revealable_expired"
 }
 
 func wipe(ctx context.Context, ref websiteRef, nowRFC string) (bool, error) {
