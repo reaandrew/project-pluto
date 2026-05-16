@@ -93,6 +93,23 @@ window.__FINANCE_CONFIG__ = {
 };
 EOF
 
+# Rewrite the relative asset refs vite emits (base: './') to the
+# ABSOLUTE served base for this mode. Without this, index.html's
+# ./assets/... and ./runtime-config.js resolve against the browser
+# path, so any multi-segment route — notably /oauth/callback (the
+# Cognito redirect target) and a refresh on /queue, /replies, … —
+# 404s every asset and renders a blank screen. The single shared
+# dist/ artifact is preserved; only the served HTML changes per env.
+#   prod  BASENAME=/      → ABS_BASE=/        (https://<domain>/…)
+#   prev  BASENAME=/<env> → ABS_BASE=/<env>/  (https://preview/<env>/…)
+# Pitfall #17 — the correct mitigation is an absolute base equal to
+# the path the SPA is served under, not relative paths.
+ABS_BASE="${BASENAME%/}/"
+echo "==> Rewriting relative asset refs in HTML → ${ABS_BASE}"
+find "${DIST_DIR}" -maxdepth 2 -name '*.html' -type f -print0 | while IFS= read -r -d '' f; do
+  sed -i -E "s#(src|href)=\"\\./#\\1=\"${ABS_BASE}#g" "${f}"
+done
+
 echo "==> Sync assets (long-cache) to ${S3_PREFIX}"
 aws s3 sync "${DIST_DIR}/" "${S3_PREFIX}" \
   --delete \
