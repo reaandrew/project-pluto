@@ -935,3 +935,41 @@ export async function applyTuner(id: string, ref: string): Promise<void> {
 export async function dismissTuner(id: string, ref: string, reason?: string): Promise<void> {
   return decideTuner(id, ref, 'dismiss', reason);
 }
+
+// iter 11.2/11.3: funnel + cost + per-vertical dashboard. The
+// metrics-rollup Lambda writes one Metric row per UTC day; /metrics
+// reads a window of them.
+export interface VerticalMetric {
+  funnel: Record<string, number>;
+  styleVersion: number;
+  toneVersion: number;
+}
+
+export interface MetricDay {
+  date: string;
+  funnel: Record<string, number>;
+  perVertical: Record<string, VerticalMetric>;
+  costByStage: Record<string, number>;
+  totalCostUsd: number;
+  generatedAt: string;
+}
+
+export interface RollupResponse {
+  from: string;
+  to: string;
+  days: MetricDay[];
+}
+
+export async function getMetricsRollup(from?: string, to?: string): Promise<RollupResponse> {
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  const url = `${cfg.bffBaseUrl}/metrics/rollup${suffix}`;
+  const res = await authedFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status} from GET ${url}: ${text}`);
+  }
+  return (await res.json()) as RollupResponse;
+}

@@ -76,6 +76,8 @@ func handle(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.API
 			return httpresp.Error(500, "could not initialise"), nil
 		}
 		return handleRunDiscovery(ctx, deps)
+	case method == "GET" && strings.HasSuffix(path, "/metrics/rollup"):
+		return handleRollup(ctx, req)
 	default:
 		return httpresp.Error(405, "method not allowed"), nil
 	}
@@ -241,6 +243,79 @@ type discoveriesResponse struct {
 type runDiscoveryResponse struct {
 	Status    string `json:"status"`
 	StartedAt string `json:"startedAt"`
+}
+
+// --- iter 11.2/11.3: funnel + cost + per-vertical dashboard ----------
+
+// metricRow mirrors the metrics-rollup Metric item (pk=METRIC,
+// sk=DATE#<date>). Read-only projection for the dashboard.
+type metricRow struct {
+	Date        string                    `dynamodbav:"date" json:"date"`
+	Funnel      map[string]int            `dynamodbav:"funnel" json:"funnel"`
+	PerVertical map[string]verticalMetric `dynamodbav:"perVertical" json:"perVertical"`
+	CostByStage map[string]float64        `dynamodbav:"costByStage" json:"costByStage"`
+	TotalCost   float64                   `dynamodbav:"totalCostUsd" json:"totalCostUsd"`
+	GeneratedAt string                    `dynamodbav:"generatedAt" json:"generatedAt"`
+}
+
+type verticalMetric struct {
+	Funnel       map[string]int `dynamodbav:"funnel" json:"funnel"`
+	StyleVersion int            `dynamodbav:"styleVersion" json:"styleVersion"`
+	ToneVersion  int            `dynamodbav:"toneVersion" json:"toneVersion"`
+}
+
+type rollupResponse struct {
+	From string      `json:"from"`
+	To   string      `json:"to"`
+	Days []metricRow `json:"days"`
+}
+
+// handleRollup returns the daily Metric snapshots in a date window
+// (default the last 30 days) — one gsi-free Query on the single
+// METRIC partition (sk = DATE#<date>, range-queryable).
+func handleRollup(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	logger := applog.FromContext(ctx)
+	now := time.Now().UTC()
+	to := req.QueryStringParameters["to"]
+	if to == "" {
+		to = now.Format("2006-01-02")
+	}
+	from := req.QueryStringParameters["from"]
+	if from == "" {
+		from = now.AddDate(0, 0, -30).Format("2006-01-02")
+	}
+	if from > to {
+		return httpresp.Error(400, "from must be <= to"), nil
+	}
+
+	client, err := ddb.Client(ctx)
+	if err != nil {
+		logger.Error("metrics.rollup.ddb", "err", err)
+		return httpresp.Error(500, "could not load metrics"), nil
+	}
+	out, err := client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(ddb.TableName()),
+		KeyConditionExpression: aws.String("pk = :pk AND sk BETWEEN :a AND :b"),
+		ExpressionAttributeValues: map[string]dtypes.AttributeValue{
+			":pk": &dtypes.AttributeValueMemberS{Value: "METRIC"},
+			":a":  &dtypes.AttributeValueMemberS{Value: "DATE#" + from},
+			":b":  &dtypes.AttributeValueMemberS{Value: "DATE#" + to},
+		},
+	})
+	if err != nil {
+		logger.Error("metrics.rollup.query", "err", err)
+		return httpresp.Error(500, "could not load metrics"), nil
+	}
+	days := make([]metricRow, 0, len(out.Items))
+	for _, it := range out.Items {
+		var m metricRow
+		if err := attributevalue.UnmarshalMap(it, &m); err != nil {
+			return httpresp.Error(500, "could not decode metrics"), nil
+		}
+		days = append(days, m)
+	}
+	body, _ := json.Marshal(rollupResponse{From: from, To: to, Days: days})
+	return httpresp.JSON(200, string(body)), nil
 }
 
 func main() {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import Metrics, { orderedDays } from './Metrics';
+import Metrics, { orderedDays, verticalRows } from './Metrics';
+import type { MetricDay } from '../api';
 
 const sample = {
   recent: [
@@ -53,8 +54,14 @@ function stubFetch(map: Record<string, (init?: RequestInit) => Response>) {
     'fetch',
     vi.fn((url: string, init?: RequestInit) => {
       const handler = Object.entries(map).find(([k]) => url.endsWith(k))?.[1];
-      if (!handler) throw new Error(`Unstubbed fetch: ${url}`);
-      return Promise.resolve(handler(init));
+      if (handler) return Promise.resolve(handler(init));
+      // The iter-11.2/11.3 dashboard fires /metrics/rollup on mount;
+      // default it to an empty window unless a test overrides it, so
+      // the existing discoveries-widget tests stay focused.
+      if (url.endsWith('/metrics/rollup')) {
+        return Promise.resolve(json(200, { from: '', to: '', days: [] }));
+      }
+      throw new Error(`Unstubbed fetch: ${url}`);
     })
   );
 }
@@ -157,5 +164,65 @@ describe('orderedDays', () => {
       '2026-05-10': 2,
     });
     expect(out.map((p) => p[0])).toEqual(['2026-05-11', '2026-05-10', '2026-05-09']);
+  });
+});
+
+const rollupDay: MetricDay = {
+  date: '2026-05-16',
+  funnel: { new: 9, emailed: 10, responded: 4, converted: 1 },
+  perVertical: {
+    accountants: {
+      funnel: { emailed: 6, responded: 3, converted: 1 },
+      styleVersion: 4,
+      toneVersion: 2,
+    },
+    dentist: {
+      funnel: { emailed: 4, responded: 1, converted: 0 },
+      styleVersion: 1,
+      toneVersion: 1,
+    },
+  },
+  costByStage: { audit: 1.5, outreach: 0.25 },
+  totalCostUsd: 1.75,
+  generatedAt: '2026-05-16T09:00:00Z',
+};
+
+describe('verticalRows', () => {
+  it('computes reply/conversion rates and sorts by reply rate desc', () => {
+    const rows = verticalRows(rollupDay);
+    expect(rows.map((r) => r.vertical)).toEqual(['accountants', 'dentist']);
+    expect(rows[0].replyRate).toBeCloseTo(0.5); // 3/6
+    expect(rows[0].conversionRate).toBeCloseTo(1 / 6);
+    expect(rows[1].replyRate).toBeCloseTo(0.25); // 1/4
+    expect(rows[0].styleVersion).toBe(4);
+  });
+  it('is empty + division-safe with no data', () => {
+    expect(verticalRows(undefined)).toEqual([]);
+  });
+});
+
+describe('Metrics dashboard', () => {
+  it('renders funnel, cost, and the vertical comparison sorted by reply rate', async () => {
+    stubFetch({
+      '/metrics/discoveries': () => json(200, sample),
+      '/metrics/rollup': () =>
+        json(200, { from: '2026-05-16', to: '2026-05-16', days: [rollupDay] }),
+    });
+    render(<Metrics />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /Funnel — 2026-05-16/ })).toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole('heading', { name: /Cost — 2026-05-16 to 2026-05-16/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/\$1\.75/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Vertical comparison — sorted by reply rate/ })
+    ).toBeInTheDocument();
+    const rowsText = screen.getAllByRole('row').map((r) => r.textContent ?? '');
+    const acc = rowsText.findIndex((t) => t.includes('accountants'));
+    const den = rowsText.findIndex((t) => t.includes('dentist'));
+    expect(acc).toBeGreaterThan(-1);
+    expect(acc).toBeLessThan(den); // accountants (50%) above dentist (25%)
   });
 });

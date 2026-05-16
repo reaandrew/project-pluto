@@ -1,10 +1,63 @@
 import { useEffect, useState } from 'react';
 import {
   getDiscoveries,
+  getMetricsRollup,
   runDiscoveryNow,
   type DiscoveriesResponse,
   type DiscoveryRow,
+  type MetricDay,
 } from '../api';
+
+const FUNNEL_ORDER = [
+  'new',
+  'auditing',
+  'qualified',
+  'rejected',
+  'awaiting_review',
+  'approved',
+  'regenerate_requested',
+  'rejected_after_review',
+  'email_drafted',
+  'emailed',
+  'responded',
+  'converted',
+] as const;
+
+export interface VerticalRow {
+  vertical: string;
+  emailed: number;
+  responded: number;
+  converted: number;
+  replyRate: number;
+  conversionRate: number;
+  styleVersion: number;
+  toneVersion: number;
+}
+
+const rate = (num: number, denom: number): number => (denom > 0 ? num / denom : 0);
+
+// verticalRows derives the per-vertical comparison from the latest
+// day's snapshot, sorted by reply rate descending. Exported for tests.
+export function verticalRows(latest: MetricDay | undefined): VerticalRow[] {
+  if (!latest) return [];
+  return Object.entries(latest.perVertical)
+    .map(([vertical, vm]) => {
+      const emailed = vm.funnel.emailed ?? 0;
+      const responded = vm.funnel.responded ?? 0;
+      const converted = vm.funnel.converted ?? 0;
+      return {
+        vertical,
+        emailed,
+        responded,
+        converted,
+        replyRate: rate(responded, emailed),
+        conversionRate: rate(converted, emailed),
+        styleVersion: vm.styleVersion,
+        toneVersion: vm.toneVersion,
+      };
+    })
+    .sort((a, b) => b.replyRate - a.replyRate);
+}
 
 // /metrics is the operator's at-a-glance dashboard. Iter 1.4 lands the
 // discoveries widget: a 7-day count, the most recent Business rows,
@@ -17,6 +70,7 @@ export default function Metrics() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'ok' | 'error'>('idle');
   const [runError, setRunError] = useState<string | null>(null);
+  const [rollup, setRollup] = useState<MetricDay[] | null>(null);
 
   function refresh() {
     getDiscoveries()
@@ -25,6 +79,11 @@ export default function Metrics() {
         setLoadError(null);
       })
       .catch((err: Error) => setLoadError(err.message));
+    // The funnel/cost dashboard is best-effort: a roll-up gap must not
+    // blank the discoveries widget.
+    getMetricsRollup()
+      .then((r) => setRollup(r.days))
+      .catch(() => setRollup([]));
   }
 
   useEffect(refresh, []);
@@ -131,7 +190,113 @@ export default function Metrics() {
           </table>
         )}
       </section>
+
+      <MetricsDashboard days={rollup} />
     </div>
+  );
+}
+
+function MetricsDashboard({ days }: { days: MetricDay[] | null }) {
+  if (days === null) {
+    return (
+      <section style={section}>
+        <h3 style={h3}>Funnel &amp; cost</h3>
+        <p>Loading…</p>
+      </section>
+    );
+  }
+  if (days.length === 0) {
+    return (
+      <section style={section}>
+        <h3 style={h3}>Funnel &amp; cost</h3>
+        <p style={{ color: '#666' }}>
+          No roll-up yet — the hourly metrics-rollup writes the first snapshot shortly.
+        </p>
+      </section>
+    );
+  }
+  const latest = days[days.length - 1];
+  const windowCost = days.reduce((s, d) => s + d.totalCostUsd, 0);
+  const costByStage: Record<string, number> = {};
+  for (const d of days) {
+    for (const [st, v] of Object.entries(d.costByStage ?? {})) {
+      costByStage[st] = (costByStage[st] ?? 0) + v;
+    }
+  }
+  const vrows = verticalRows(latest);
+
+  return (
+    <>
+      <section style={section}>
+        <h3 style={h3}>Funnel — {latest.date}</h3>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0' }}>
+          {FUNNEL_ORDER.map((s) => (
+            <li key={s} style={{ fontFamily: 'monospace' }}>
+              {s.padEnd(22)}: <strong>{latest.funnel?.[s] ?? 0}</strong>
+              <span style={{ color: '#aaa', marginLeft: '0.5rem' }}>
+                {bar(latest.funnel?.[s] ?? 0)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section style={section}>
+        <h3 style={h3}>
+          Cost — {days[0].date} to {latest.date}
+        </h3>
+        <p style={{ color: '#666' }}>
+          Total spend: <strong>${windowCost.toFixed(2)}</strong> over {days.length} day(s).
+        </p>
+        <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0' }}>
+          {Object.entries(costByStage)
+            .sort((a, b) => b[1] - a[1])
+            .map(([st, v]) => (
+              <li key={st} style={{ fontFamily: 'monospace' }}>
+                {st.padEnd(14)}: <strong>${v.toFixed(2)}</strong>
+              </li>
+            ))}
+        </ul>
+      </section>
+
+      <section style={section}>
+        <h3 style={h3}>Vertical comparison — sorted by reply rate</h3>
+        {vrows.length === 0 ? (
+          <p style={{ color: '#666' }}>No per-vertical data yet.</p>
+        ) : (
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #ddd', textAlign: 'left' }}>
+                <th style={th}>Vertical</th>
+                <th style={th}>Emailed</th>
+                <th style={th}>Replied</th>
+                <th style={th}>Reply rate</th>
+                <th style={th}>Conv. rate</th>
+                <th style={th}>Style v</th>
+                <th style={th}>Tone v</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vrows.map((r) => (
+                <tr key={r.vertical} style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={td}>{r.vertical}</td>
+                  <td style={td}>{r.emailed}</td>
+                  <td style={td}>{r.responded}</td>
+                  <td style={td}>{(r.replyRate * 100).toFixed(1)}%</td>
+                  <td style={td}>{(r.conversionRate * 100).toFixed(1)}%</td>
+                  <td style={td}>{r.styleVersion}</td>
+                  <td style={td}>{r.toneVersion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p style={{ color: '#888', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+          Style/Tone v columns tag each vertical with the profile version in effect — compare reply
+          rate across days to see whether an applied tuner delta moved the numbers.
+        </p>
+      </section>
+    </>
   );
 }
 
