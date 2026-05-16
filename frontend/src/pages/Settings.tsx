@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getSettings, patchSettings, type PipelineSettings } from '../api';
+import {
+  getEmailStatus,
+  getSettings,
+  patchSettings,
+  type EmailStatus,
+  type PipelineSettings,
+} from '../api';
 
 // Settings is the operator's edit surface for the singleton
 // PipelineSettings row. GET on mount; the form binds to local state;
@@ -78,6 +84,8 @@ export default function Settings() {
       <p style={{ color: '#666' }}>
         See also: <Link to="/settings/targeting">Targeting profiles</Link>.
       </p>
+
+      <SesStatus />
 
       <form onSubmit={onSubmit}>
         <section style={section}>
@@ -292,3 +300,59 @@ const saveButton = {
   borderRadius: 4,
   cursor: 'pointer',
 } as const;
+
+// SesStatus is a compact read-only panel (iter 8.1) showing SES
+// domain-verification status from GET /email/status. Best-effort: a
+// load failure (or a per-PR env with no prod identity) renders an
+// informational line rather than blocking the settings form.
+function SesStatus() {
+  const [status, setStatus] = useState<EmailStatus | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getEmailStatus()
+      .then((s) => !cancelled && setStatus(s))
+      .catch((e: Error) => !cancelled && setErr(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section style={section} aria-label="ses-status">
+      <h3 style={h3}>SES email infrastructure</h3>
+      {!status && !err && <p style={hint}>Checking domain verification…</p>}
+      {err && (
+        <p style={hint}>
+          Verification status unavailable ({err}). See <code>docs/SES.md</code>.
+        </p>
+      )}
+      {status && (
+        <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.9rem' }}>
+          <li>
+            Identity <code>{status.identity}</code>
+          </li>
+          <li style={{ color: status.verifiedForSending ? '#157f3b' : '#b00020' }}>
+            {status.verifiedForSending ? '✓' : '✗'} verified for sending
+          </li>
+          <li style={{ color: status.dkimStatus === 'SUCCESS' ? '#157f3b' : '#b00020' }}>
+            {status.dkimStatus === 'SUCCESS' ? '✓' : '✗'} DKIM: {status.dkimStatus}
+            {status.dkimSigningEnabled ? ' (signing on)' : ''}
+          </li>
+          {status.mailFromDomain && (
+            <li
+              style={{ color: status.mailFromDomainStatus === 'SUCCESS' ? '#157f3b' : '#b00020' }}
+            >
+              {status.mailFromDomainStatus === 'SUCCESS' ? '✓' : '✗'} MAIL FROM{' '}
+              <code>{status.mailFromDomain}</code>: {status.mailFromDomainStatus}
+            </li>
+          )}
+        </ul>
+      )}
+      <p style={hint}>
+        Sandbox-out + DNS records are documented in <code>docs/SES.md</code>.
+      </p>
+    </section>
+  );
+}

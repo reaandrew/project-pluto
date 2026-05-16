@@ -46,6 +46,9 @@ resource "aws_lambda_function" "api_email" {
       # out of feedback payloads. Same CMK + already-granted Decrypt as
       # api-website/email-draft (key policy in terraform/kms.tf).
       PASSCODE_KMS_KEY_ID = aws_kms_alias.passcode_cleartext.target_key_arn
+      # iter 8.1 — GET /email/status calls sesv2:GetEmailIdentity on
+      # the project-global outreach.<base_domain> singleton.
+      SES_OUTREACH_IDENTITY = "outreach.${var.base_domain}"
     }
   }
 
@@ -99,4 +102,30 @@ resource "aws_apigatewayv2_route" "candidate_email_reject" {
   target             = "integrations/${aws_apigatewayv2_integration.api_email.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# iter 8.1 — operator-facing SES domain-verification status check.
+resource "aws_apigatewayv2_route" "email_status" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /email/status"
+  target             = "integrations/${aws_apigatewayv2_integration.api_email.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Read-only sesv2:GetEmailIdentity on the project-global
+# outreach.<base_domain> identity singleton (same ARN shape as
+# ses.tf's ses_send policy). Separate inline policy on the shared
+# lambda_api role — additive, least-privilege (no SES send here).
+resource "aws_iam_role_policy" "api_email_ses_status" {
+  name = "api-email-ses-status"
+  role = aws_iam_role.lambda_api.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sesv2:GetEmailIdentity"]
+      Resource = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/outreach.${var.base_domain}"
+    }]
+  })
 }
