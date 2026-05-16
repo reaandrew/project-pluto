@@ -43,6 +43,7 @@ const (
 	StageTunerStyle     Stage = "tuner-style"
 	StageTunerEmailTone Stage = "tuner-email-tone"
 	StageTunerTargeting Stage = "tuner-targeting"
+	StageReplyTriage    Stage = "reply-triage"
 )
 
 // CacheTypePrefix is written to the `type` attribute of cache rows.

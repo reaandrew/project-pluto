@@ -52,12 +52,14 @@ func setup(t *testing.T) {
 }
 
 type captured struct {
-	respondedBiz string
-	respondedN   int
-	event        EmailEventRow
-	eventPut     bool
-	published    ReplyDetail
-	pubCalled    bool
+	respondedBiz   string
+	respondedN     int
+	event          EmailEventRow
+	eventPut       bool
+	published      ReplyDetail
+	pubCalled      bool
+	receivedBucket string
+	receivedKey    string
 }
 
 func newDeps(c *captured, raw string, ref *refIndex) runDeps {
@@ -69,8 +71,12 @@ func newDeps(c *captured, raw string, ref *refIndex) runDeps {
 			c.respondedN++
 			return nil
 		},
-		PutEvent:    func(_ context.Context, row EmailEventRow) error { c.event = row; c.eventPut = true; return nil },
-		Publish:     func(_ context.Context, d ReplyDetail) error { c.published = d; c.pubCalled = true; return nil },
+		PutEvent: func(_ context.Context, row EmailEventRow) error { c.event = row; c.eventPut = true; return nil },
+		Publish:  func(_ context.Context, d ReplyDetail) error { c.published = d; c.pubCalled = true; return nil },
+		PublishReceived: func(_ context.Context, bucket, key string) error {
+			c.receivedBucket, c.receivedKey = bucket, key
+			return nil
+		},
 		Now:         func() time.Time { return time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC) },
 		ReplyDomain: "outreach.example.com",
 	}
@@ -134,7 +140,12 @@ func TestRunOne_NoPlusToken_Unattributed(t *testing.T) {
 		t.Fatalf("processRecord: %v", err)
 	}
 	if c.respondedN != 0 || c.pubCalled {
-		t.Error("no +token ⇒ must not mark responded or publish")
+		t.Error("no +token ⇒ must not mark responded or publish email.replied")
+	}
+	// …but reply-triage must still see it: reply.received is published
+	// for every parseable reply, attributed or not.
+	if c.receivedBucket != "b" || c.receivedKey != "k" {
+		t.Errorf("reply.received must fire for unattributed replies too: %q/%q", c.receivedBucket, c.receivedKey)
 	}
 }
 

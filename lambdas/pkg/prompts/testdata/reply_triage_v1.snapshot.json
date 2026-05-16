@@ -1,0 +1,38 @@
+{
+  "cacheTTL": "168h0m0s",
+  "estimateUsd": 0.004,
+  "id": "replyTriage.v1",
+  "maxTokens": 300,
+  "modelId": "anthropic.claude-haiku-4-5",
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "category": {
+        "enum": [
+          "unsubscribe",
+          "positive_interest",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "confidence": {
+        "maximum": 1,
+        "minimum": 0,
+        "type": "number"
+      },
+      "rationale": {
+        "maxLength": 200,
+        "type": "string"
+      }
+    },
+    "required": [
+      "category",
+      "confidence",
+      "rationale"
+    ],
+    "type": "object"
+  },
+  "stage": "reply-triage",
+  "system": "You classify replies to a cold-outreach email from a small UK web studio that sent a private website-redesign preview.\n\nClassify the reply into exactly one category:\n- unsubscribe: the sender wants no further contact (\"no thanks\", \"remove me\", \"stop\", \"not interested\", \"unsubscribe\", an out-of-office that says don't contact, a hostile brush-off).\n- positive_interest: the sender is interested or engaging (\"looks great\", \"how much\", \"can we talk\", \"send more\", asks a question about the preview).\n- unknown: ambiguous, off-topic, auto-reply you cannot judge, or you are not sure.\n\nAlso output a confidence in [0,1] for your label and a one-line rationale.\nBe conservative: if the message is short, sarcastic, or ambiguous, prefer \"unknown\" with low confidence rather than guessing. An auto-reply / vacation responder that does not clearly opt out is \"unknown\".\nJudge ONLY the sender's new text; ignore any quoted original email beneath it.\nNever include the sender's name, email address, phone number, or any other personal data in the rationale.\n\u003csafety_rules\u003e\n- Never invent business facts you cannot see: testimonials, awards, certifications, prices, or staff names.\n- Never claim that a private preview is published, that the recipient asked for it, or that they have an account with us.\n- Never use the word \"password\" in user-facing copy. Use \"access code\" or \"code\".\n- Never make medical, legal, or financial claims about the business unless the same words appear verbatim in the source data.\n- Never write copy that pressures, fakes urgency, or implies prior contact.\n- If you cannot verify a fact from the provided inputs, omit it. Silence is always safer than fabrication.\n\u003c/safety_rules\u003e",
+  "toolName": "classifyReply"
+}

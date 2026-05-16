@@ -118,13 +118,19 @@ resource "aws_lambda_function" "reply_detector" {
   tags = local.common_tags
 }
 
-# A reply is not silently lost without an explicit DLQ: the async S3
-# invoke retries twice by default, and the raw object persists in the
-# inbound bucket for the full 90-day lifecycle, so a hard-failed reply
-# can always be re-driven / picked up by iter-8.5 triage from S3. An
-# on-failure destination would need `lambda:PutFunctionEventInvokeConfig`
-# on the CI deploy role (defined in the do-not-touch aws-setup/
-# singleton) — out of scope for iter 8.4.
+# Single S3→Lambda notification (reply-detector only) — the iter-8.4
+# wiring, proven to deploy. Direct S3 fan-out to a second consumer is
+# impossible (S3 rejects two destinations sharing a prefix+event) and
+# the CI deploy role (aws-setup/, do-not-touch) cannot create
+# default-bus EventBridge rules (events:PutRule/PutTargets/TagResource
+# denied off the pipeline bus). So reply-triage (iter 8.5.1) is NOT
+# triggered here — reply-detector republishes a `reply.received`
+# pipeline event that reply-triage consumes via SQS (see
+# reply-triage.tf), the project's standard async-consumer pattern.
+#
+# No on-failure DLQ: S3 async-retries and the raw object persists in
+# the bucket for the 90d lifecycle (lambda:PutFunctionEventInvokeConfig
+# is also denied to the CI role — iter 8.4 precedent).
 resource "aws_lambda_permission" "reply_detector_s3" {
   statement_id   = "AllowS3Invoke"
   action         = "lambda:InvokeFunction"
