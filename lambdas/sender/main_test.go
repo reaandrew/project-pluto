@@ -81,7 +81,7 @@ type captured struct {
 	markerKey  string
 	eventRow   EmailEventRow
 	eventPut   bool
-	msgIndex   SESMsgIndexRow
+	msgIndexes []SESMsgIndexRow
 	draftSet   bool
 	published  pkgevents.Envelope[EmailSentDetail]
 	pubCalled  bool
@@ -106,8 +106,11 @@ func newDeps(t *testing.T, c *captured, draftStatus, contactEmail string, suppre
 			c.sentRaw = raw
 			return "ses-msg-1", nil
 		},
-		PutEvent:     func(_ context.Context, row EmailEventRow) error { c.eventRow = row; c.eventPut = true; return nil },
-		PutMsgIndex:  func(_ context.Context, idx SESMsgIndexRow) error { c.msgIndex = idx; return nil },
+		PutEvent: func(_ context.Context, row EmailEventRow) error { c.eventRow = row; c.eventPut = true; return nil },
+		PutMsgIndex: func(_ context.Context, idx SESMsgIndexRow) error {
+			c.msgIndexes = append(c.msgIndexes, idx)
+			return nil
+		},
 		SetDraftSent: func(context.Context, string, string, string) error { c.draftSet = true; return nil },
 		Publish: func(_ context.Context, env pkgevents.Envelope[EmailSentDetail]) error {
 			c.published = env
@@ -141,6 +144,7 @@ func TestRunOne_HappyPath(t *testing.T) {
 	for _, want := range []string{
 		"From: outreach@outreach.example.com",
 		"To: jane@acme.co.uk",
+		"Reply-To: outreach+draft-1@outreach.example.com",
 		"List-Unsubscribe: <https://api.example.com/unsubscribe?d=draft-1>, <mailto:outreach@outreach.example.com?subject=unsubscribe>",
 		"List-Unsubscribe-Post: List-Unsubscribe=One-Click",
 		"Use access code H7Q32KX9.",
@@ -155,8 +159,14 @@ func TestRunOne_HappyPath(t *testing.T) {
 	if !c.draftSet {
 		t.Error("draft status not flipped to sent")
 	}
-	if c.msgIndex.PK != "SESMSG#ses-msg-1" || c.msgIndex.BusinessID != "biz-1" || c.msgIndex.DraftID != "draft-1" {
-		t.Errorf("SES msg reverse-index drift: %+v", c.msgIndex)
+	if len(c.msgIndexes) != 2 {
+		t.Fatalf("want 2 reverse-index writes (SESMSG + REPLYREF), got %d: %+v", len(c.msgIndexes), c.msgIndexes)
+	}
+	if c.msgIndexes[0].PK != "SESMSG#ses-msg-1" || c.msgIndexes[0].BusinessID != "biz-1" || c.msgIndexes[0].DraftID != "draft-1" {
+		t.Errorf("SES msg reverse-index drift: %+v", c.msgIndexes[0])
+	}
+	if c.msgIndexes[1].PK != "REPLYREF#draft-1" || c.msgIndexes[1].Type != "ReplyRefIndex" || c.msgIndexes[1].BusinessID != "biz-1" || c.msgIndexes[1].ContactID != "con-1" {
+		t.Errorf("reply-ref reverse-index drift: %+v", c.msgIndexes[1])
 	}
 	if !c.pubCalled || c.published.Detail.SESMessageID != "ses-msg-1" {
 		t.Errorf("email.sent not published correctly: %+v", c.published.Detail)
@@ -235,6 +245,19 @@ func TestSendDedupKey_StableAndDistinct(t *testing.T) {
 	}
 	if a == sendDedupKey("con-1", "web-2") || a == sendDedupKey("con-2", "web-1") {
 		t.Error("dedup key must vary by contact and website")
+	}
+}
+
+func TestPlusAddress(t *testing.T) {
+	if got := plusAddress("outreach@outreach.example.com", "d-123"); got != "outreach+d-123@outreach.example.com" {
+		t.Errorf("plusAddress: %q", got)
+	}
+	// Token must not be able to break the address or inject a header.
+	if got := plusAddress("o@x.com", "a@b\r\nBcc: e+f"); strings.ContainsAny(got, "\r\n") || strings.Count(got, "@") != 1 {
+		t.Errorf("plusAddress not sanitised: %q", got)
+	}
+	if got := plusAddress("noatsign", "x"); got != "noatsign" {
+		t.Errorf("plusAddress should no-op on a malformed address: %q", got)
 	}
 }
 

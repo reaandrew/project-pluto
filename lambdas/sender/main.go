@@ -235,6 +235,22 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[EmailApproved
 	}); err != nil {
 		return fmt.Errorf("sender: put SES msg index: %w", err)
 	}
+	// Reply attribution index: a reply comes back to the plus-addressed
+	// Reply-To (outreach+<draftId>@…) and carries no businessId. Keyed
+	// by draftId (known pre-send, unlike the sesMessageId) so the
+	// iter-8.4 reply-detector can map a reply to the business journey.
+	if err := d.PutMsgIndex(ctx, SESMsgIndexRow{
+		PK:         "REPLYREF#" + det.DraftID,
+		SK:         "RECORD",
+		Type:       "ReplyRefIndex",
+		BusinessID: det.BusinessID,
+		DraftID:    det.DraftID,
+		WebsiteID:  det.WebsiteID,
+		ContactID:  det.ContactID,
+		CreatedAt:  now,
+	}); err != nil {
+		return fmt.Errorf("sender: put reply-ref index: %w", err)
+	}
 	if err := d.SetDraftSent(ctx, det.BusinessID, det.DraftID, now); err != nil {
 		return fmt.Errorf("sender: mark draft sent: %w", err)
 	}
@@ -272,6 +288,12 @@ func buildRawMIME(from, to string, draft *EmailDraftRow, unsubBase string) []byt
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + to + "\r\n")
+	// Plus-addressed Reply-To so a reply lands at
+	// outreach+<draftId>@<domain> — the iter-8.4 reply-detector reads
+	// the +token to attribute the reply deterministically (no fragile
+	// In-Reply-To/Message-ID matching). The domain identity covers all
+	// sub-addresses so no extra SES verification is needed.
+	b.WriteString("Reply-To: " + plusAddress(from, draft.ID) + "\r\n")
 	b.WriteString("Subject: " + sanitiseHeader(draft.Subject) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
@@ -280,6 +302,19 @@ func buildRawMIME(from, to string, draft *EmailDraftRow, unsubBase string) []byt
 	b.WriteString("\r\n")
 	b.WriteString(draft.Body)
 	return []byte(b.String())
+}
+
+// plusAddress turns "outreach@outreach.example.com" + draftID into
+// "outreach+<draftID>@outreach.example.com". The token is a UUID
+// (server-generated) but is still stripped of "@", "+", and CR/LF
+// defensively so it can never break the address or inject a header.
+func plusAddress(addr, token string) string {
+	at := strings.LastIndex(addr, "@")
+	if at < 0 {
+		return addr
+	}
+	safe := strings.NewReplacer("\r", "", "\n", "", "@", "", "+", "").Replace(token)
+	return addr[:at] + "+" + safe + addr[at:]
 }
 
 // sanitiseHeader strips CR/LF so a crafted subject can't inject extra
