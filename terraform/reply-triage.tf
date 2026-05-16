@@ -60,16 +60,9 @@ resource "aws_lambda_function" "reply_triage" {
 # Invocation permission (EventBridge principal) + the S3→EventBridge
 # rule fan-out live in reply-detector.tf alongside the shared inbound
 # bucket + rule.
-
-resource "aws_iam_role_policy" "reply_triage_s3_read" {
-  name = "reply-triage-s3-read"
-  role = aws_iam_role.lambda_api.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "s3:GetObject"
-      Resource = "${aws_s3_bucket.inbound_mail.arn}/inbound/*"
-    }]
-  })
-}
+#
+# No reply-triage-specific S3 IAM: reply-triage runs on the shared
+# lambda_api role, and aws_iam_role_policy.reply_detector_s3_read
+# (reply-detector.tf) already grants s3:GetObject on
+# ${inbound_mail.arn}/inbound/* to that same role. A second identical
+# inline policy would just be pitfall-#6 duplication.
