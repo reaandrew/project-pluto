@@ -91,6 +91,7 @@ type runDeps struct {
 	IsSuppressed func(ctx context.Context, email string) (bool, error)
 	Send         func(ctx context.Context, raw []byte) (sesMessageID string, err error)
 	PutEvent     func(ctx context.Context, row EmailEventRow) error
+	PutMsgIndex  func(ctx context.Context, idx SESMsgIndexRow) error
 	SetDraftSent func(ctx context.Context, businessID, draftID, now string) error
 	Publish      func(ctx context.Context, env pkgevents.Envelope[EmailSentDetail]) error
 	CapUSD       func(ctx context.Context) (float64, error)
@@ -218,6 +219,22 @@ func runOne(ctx context.Context, d runDeps, env pkgevents.Envelope[EmailApproved
 	}); err != nil {
 		return fmt.Errorf("sender: put EmailEvent: %w", err)
 	}
+	// Reverse index: a later SES bounce/complaint SNS notification
+	// only carries the sesMessageId + recipient — never our
+	// businessId. This lets the iter-8.3 ses-feedback Lambda attribute
+	// the EmailEvent(bounced|complained) row to the right business.
+	if err := d.PutMsgIndex(ctx, SESMsgIndexRow{
+		PK:         "SESMSG#" + msgID,
+		SK:         "RECORD",
+		Type:       "SESMessageIndex",
+		BusinessID: det.BusinessID,
+		DraftID:    det.DraftID,
+		WebsiteID:  det.WebsiteID,
+		ContactID:  det.ContactID,
+		CreatedAt:  now,
+	}); err != nil {
+		return fmt.Errorf("sender: put SES msg index: %w", err)
+	}
 	if err := d.SetDraftSent(ctx, det.BusinessID, det.DraftID, now); err != nil {
 		return fmt.Errorf("sender: mark draft sent: %w", err)
 	}
@@ -296,6 +313,20 @@ type EmailEventRow struct {
 	OccurredAt   string `dynamodbav:"occurredAt"`
 }
 
+// SESMsgIndexRow maps an SES messageId back to the business journey so
+// the iter-8.3 ses-feedback consumer can attribute bounce/complaint
+// notifications (which carry only the sesMessageId + recipient).
+type SESMsgIndexRow struct {
+	PK         string `dynamodbav:"pk"`
+	SK         string `dynamodbav:"sk"`
+	Type       string `dynamodbav:"type"`
+	BusinessID string `dynamodbav:"businessId"`
+	DraftID    string `dynamodbav:"draftId"`
+	WebsiteID  string `dynamodbav:"websiteId"`
+	ContactID  string `dynamodbav:"contactId"`
+	CreatedAt  string `dynamodbav:"createdAt"`
+}
+
 // --- AWS wiring (production) -------------------------------------------
 
 func buildDeps(ctx context.Context) (runDeps, error) {
@@ -321,6 +352,7 @@ func buildDeps(ctx context.Context) (runDeps, error) {
 		IsSuppressed: isSuppressedFn(ses),
 		Send:         sendFn(ses, from, configSet),
 		PutEvent:     putEvent,
+		PutMsgIndex:  putMsgIndex,
 		SetDraftSent: setDraftSent,
 		Publish: func(ctx context.Context, env pkgevents.Envelope[EmailSentDetail]) error {
 			return pkgevents.Publish(ctx, publisher, env)
@@ -453,6 +485,24 @@ func putEvent(ctx context.Context, row EmailEventRow) error {
 		Item:      item,
 	}); err != nil {
 		return fmt.Errorf("put EmailEvent: %w", err)
+	}
+	return nil
+}
+
+func putMsgIndex(ctx context.Context, idx SESMsgIndexRow) error {
+	client, err := ddb.Client(ctx)
+	if err != nil {
+		return err
+	}
+	item, err := attributevalue.MarshalMap(idx)
+	if err != nil {
+		return fmt.Errorf("marshal SESMsgIndex: %w", err)
+	}
+	if _, err := client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(ddb.TableName()),
+		Item:      item,
+	}); err != nil {
+		return fmt.Errorf("put SESMsgIndex: %w", err)
 	}
 	return nil
 }
