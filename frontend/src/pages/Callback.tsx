@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCognitoAuthOrigin, getCognitoClientId, getCognitoRedirectUri } from '../api';
+import {
+  getBffBaseUrl,
+  getCognitoAuthOrigin,
+  getCognitoClientId,
+  getCognitoRedirectUri,
+} from '../api';
 import { completePkceFlow } from '../auth';
 
 // /oauth/callback is the URL Cognito redirects back to after the
@@ -43,7 +48,7 @@ export default function Callback() {
       return;
     }
 
-    completePkceFlow(code, authOrigin, clientId, redirectUri)
+    completePkceFlow(code, authOrigin, clientId, redirectUri, getBffBaseUrl())
       .then(() => {
         // navigate('/', { replace: true }) replaces the current
         // history entry so the back button doesn't return to the

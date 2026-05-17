@@ -1,30 +1,40 @@
-// CloudFront Function — viewer-request handler.
-// Adapted from tripwire/aws-setup/cloudfront-bff-function/tripwires-cookie-to-auth.js.
+// CloudFront Function — viewer-request handler (runtime: cloudfront-js-2.0).
 //
-// 1. Transforms `auth_token` cookie → `Authorization: Bearer <token>` header so the
-//    upstream API GW + Lambda chain can be cached and authenticated identically.
-// 2. Stamps `x-original-host` from the request Host header BEFORE CloudFront overwrites
-//    Host with the origin's domain. Lambda@Edge on origin-request reads this to know
-//    which preview branch the user hit.
+// 1. Transforms the `auth_token` cookie → `Authorization: Bearer <token>`
+//    header so the upstream API GW JWT authorizer + Lambda chain
+//    authenticate the operator's cookie session.
+// 2. Stamps `x-original-host` from the request Host header BEFORE
+//    CloudFront overwrites Host with the origin's domain. The preview
+//    Lambda@Edge (origin-request) reads it to route by preview env.
+//
+// RUNTIME NOTE (load-bearing): under cloudfront-js-2.0 cookies are NOT
+// in request.headers.cookie — they are a dedicated `request.cookies`
+// object, and the runtime REJECTS a returned request whose `headers`
+// still contains a `cookie` entry (function error "MisplacedCookies").
+// The original 1.0-style `headers.cookie` parse made this function
+// error out on EVERY request, so no Authorization header was ever
+// added and every authenticated BFF route 401'd (only the public
+// /health route worked, which masked it). Read from request.cookies;
+// never put `cookie` back onto headers.
 
 function handler(event) {
     var request = event.request;
     var headers = request.headers;
+    var cookies = request.cookies;
 
-    // Stamp the original host so Lambda@Edge origin-request can route by preview env.
+    // Stamp the original host so the preview Lambda@Edge can route.
     if (headers.host && headers.host.value) {
         headers['x-original-host'] = { value: headers.host.value };
     }
 
-    // Cookie → Authorization header transform.
-    if (headers.cookie && headers.cookie.value) {
-        var cookies = headers.cookie.value.split(';');
-        for (var i = 0; i < cookies.length; i++) {
-            var parts = cookies[i].trim().split('=');
-            if (parts[0] === 'auth_token' && parts[1]) {
-                headers.authorization = { value: 'Bearer ' + parts[1] };
-                break;
-            }
+    // Cookie → Authorization header transform (2.0 cookies API).
+    // Trim the value: a stray space/CR in the cookie would otherwise
+    // produce a malformed Authorization header (silent JWT-validation
+    // failure or header injection).
+    if (cookies && cookies.auth_token && cookies.auth_token.value) {
+        var token = cookies.auth_token.value.trim();
+        if (token) {
+            headers.authorization = { value: 'Bearer ' + token };
         }
     }
 

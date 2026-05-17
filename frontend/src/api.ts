@@ -1,6 +1,8 @@
 // Runtime configuration injected by /runtime-config.js (loaded before the bundle).
 // CI writes the per-env values at deploy time — see scripts/deploy-frontend.sh.
 
+import { clearAuthCookie } from './auth';
+
 export interface RuntimeConfig {
   bffBaseUrl: string;
   apiBaseUrl: string;
@@ -72,6 +74,9 @@ export function getCognitoClientId(): string {
 export function getCognitoRedirectUri(): string {
   return window.__FINANCE_CONFIG__?.cognitoRedirectUri ?? '';
 }
+export function getBffBaseUrl(): string {
+  return window.__FINANCE_CONFIG__?.bffBaseUrl ?? cfg.bffBaseUrl;
+}
 
 // signOutAndRedirect handles the "stale auth_token cookie" case: the
 // cookie is present (so AuthGuard let the user in) but the BFF's JWT
@@ -80,7 +85,7 @@ export function getCognitoRedirectUri(): string {
 // Exported so individual callers can invoke it on explicit sign-out
 // too (future "Sign out" link in the nav).
 function signOutAndRedirect(): void {
-  document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  clearAuthCookie(getBffBaseUrl());
   if (COGNITO_LOGIN_URL) {
     window.location.replace(COGNITO_LOGIN_URL);
   }
