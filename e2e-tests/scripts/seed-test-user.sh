@@ -14,18 +14,30 @@
 set -euo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:?ENVIRONMENT must be set}"
+
+# Skeleton pitfall #13 — denylist guard FIRST, before any side effect.
+# This gate seeds a throwaway operator for per-PR preview envs only;
+# the shared production/long-lived pools are never created into or
+# deleted from by CI. Protected production auth is verified out-of-band.
+case "${ENVIRONMENT}" in
+  production | main | master | prod | develop)
+    echo "==> '${ENVIRONMENT}' is a protected env — skipping operator seed (skeleton pitfall #13)"
+    exit 0
+    ;;
+esac
+
 E2E_TEST_USER="${E2E_TEST_USER:?E2E_TEST_USER must be set (repo/org secret)}"
 E2E_TEST_PASS="${E2E_TEST_PASS:?E2E_TEST_PASS must be set (repo/org secret; must satisfy the 14-char upper/lower/number/symbol pool policy)}"
 AWS_REGION="${AWS_REGION:-eu-west-2}"
 
-# Pool name mirrors terraform/cognito.tf:
-#   name = "ai-website-agency${local.env_suffix}-operators"
-#   env_suffix = production ? "" : "-<env_sanitized>"
-if [[ "${ENVIRONMENT}" == "production" ]]; then
-  POOL_NAME="ai-website-agency-operators"
-else
-  POOL_NAME="ai-website-agency-${ENVIRONMENT}-operators"
-fi
+# Pool name mirrors terraform/cognito.tf exactly:
+#   name       = "ai-website-agency${local.env_suffix}-operators"
+#   env_suffix = production ? "" : "-${local.env_sanitized}"
+#   env_sanitized = substr(replace(lower(var.environment),"[^a-z0-9-]","-"),0,24)
+# Apply the SAME sanitization here (skeleton pitfall #8/#19) so a raw
+# workflow_dispatch value still resolves the real pool.
+ENV_SAN=$(printf '%s' "${ENVIRONMENT}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | cut -c1-24)
+POOL_NAME="ai-website-agency-${ENV_SAN}-operators"
 echo "==> seeding e2e operator into pool '${POOL_NAME}' (env=${ENVIRONMENT})"
 
 # Resolve the pool id by name (paginate; an account can exceed one page).

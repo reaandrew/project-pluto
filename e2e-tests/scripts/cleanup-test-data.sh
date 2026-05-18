@@ -6,6 +6,16 @@
 set -uo pipefail
 
 ENVIRONMENT="${ENVIRONMENT:?ENVIRONMENT must be set}"
+
+# Skeleton pitfall #13 — denylist guard FIRST. CI never deletes from a
+# protected/shared pool (seed-test-user.sh never created one there).
+case "${ENVIRONMENT}" in
+  production | main | master | prod | develop)
+    echo "==> '${ENVIRONMENT}' is a protected env — skipping cleanup (skeleton pitfall #13)"
+    exit 0
+    ;;
+esac
+
 E2E_TEST_USER="${E2E_TEST_USER:-}"
 AWS_REGION="${AWS_REGION:-eu-west-2}"
 
@@ -14,11 +24,9 @@ if [[ -z "${E2E_TEST_USER}" ]]; then
   exit 0
 fi
 
-if [[ "${ENVIRONMENT}" == "production" ]]; then
-  POOL_NAME="ai-website-agency-operators"
-else
-  POOL_NAME="ai-website-agency-${ENVIRONMENT}-operators"
-fi
+# Same sanitization as terraform local.env_sanitized (pitfall #8/#19).
+ENV_SAN=$(printf '%s' "${ENVIRONMENT}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | cut -c1-24)
+POOL_NAME="ai-website-agency-${ENV_SAN}-operators"
 
 POOL_ID=""
 NEXT=""

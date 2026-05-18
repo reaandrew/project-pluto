@@ -19,12 +19,21 @@ const BASE_URL = process.env.BASE_URL ?? '';
 const BFF_URL = process.env.BFF_URL ?? '';
 const USER = process.env.E2E_TEST_USER ?? '';
 const PASS = process.env.E2E_TEST_PASS ?? '';
+const ENVIRONMENT = process.env.ENVIRONMENT ?? '';
 const IS_CI = !!process.env.CI;
 
-// Locally (no creds) skip; in CI missing creds is a hard failure so the
-// gate can't silently no-op.
-const haveCreds = BASE_URL && BFF_URL && USER && PASS;
-if (!haveCreds && !IS_CI) {
+// This gate runs on per-PR preview envs only. Protected/shared envs
+// have no throwaway seeded operator (seed-test-user.sh refuses them —
+// skeleton pitfall #13), so skip there rather than fail; production
+// auth is verified out-of-band.
+const PROTECTED = /^(production|main|master|prod|develop)$/.test(ENVIRONMENT);
+
+// Locally (no creds) skip; in CI on a preview env missing creds is a
+// hard failure so the gate can't silently no-op.
+const haveCreds = !!(BASE_URL && BFF_URL && USER && PASS);
+if (PROTECTED) {
+  test.skip(true, `protected env '${ENVIRONMENT}' — auth e2e is preview-only (pitfall #13)`);
+} else if (!haveCreds && !IS_CI) {
   test.skip(true, 'auth e2e needs BASE_URL/BFF_URL/E2E_TEST_USER/E2E_TEST_PASS — skipped locally');
 }
 
