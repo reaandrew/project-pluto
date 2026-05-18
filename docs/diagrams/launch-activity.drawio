@@ -1,107 +1,107 @@
 <mxfile host="app.diagrams.net" type="device">
-  <diagram name="Launch &amp; pickup">
+  <diagram name="How it works">
     <mxGraphModel dx="1200" dy="1600" grid="0" gridSize="10" page="1" pageWidth="950" pageHeight="2260" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
 
-        <mxCell id="title" value="AI website-agency — launch &amp; pickup (what happens after deploy until you see activity)" style="text;html=1;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+        <mxCell id="title" value="How it works — from setting up to seeing results" style="text;html=1;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="40" y="16" width="880" height="30" as="geometry"/>
         </mxCell>
 
-        <mxCell id="legend" value="Legend&#10;● Operator action (admin UI)   ● Automated Lambda + Bedrock   ● External (SES / Cloudflare R2)   ◆ Decision   ▦ DynamoDB status" style="text;html=1;align=left;verticalAlign=top;spacing=6;fontSize=11;strokeColor=#999999;fillColor=#FBFBFB;dashed=1;" vertex="1" parent="1">
-          <mxGeometry x="560" y="48" width="360" height="70" as="geometry"/>
+        <mxCell id="legend" value="Who does what&#10;● You (using the admin screens)     ● The system, automatically     ● Email &amp; website hosting     ◆ A decision" style="text;html=1;align=left;verticalAlign=top;spacing=6;fontSize=11;strokeColor=#999999;fillColor=#FBFBFB;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="48" width="380" height="60" as="geometry"/>
         </mxCell>
 
         <mxCell id="n0" value="" style="ellipse;html=1;fillColor=#000000;strokeColor=none;" vertex="1" parent="1">
           <mxGeometry x="330" y="60" width="30" height="30" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n1" value="Operator: deploy, then seed a vertical&#10;Targeting / Style / Email-tone profiles&#10;(/seed-vertical · Targeting page)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
-          <mxGeometry x="240" y="120" width="280" height="60" as="geometry"/>
+        <mxCell id="n1" value="You choose an industry to target and set&#10;the ground rules: what makes a good lead,&#10;the website style, and the email tone" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="230" y="120" width="300" height="60" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n2" value="Discovery fires&#10;EventBridge hourly  — or —  operator clicks&#10;&quot;Run discovery now&quot; (/metrics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="220" width="280" height="60" as="geometry"/>
+        <mxCell id="n2" value="The search for businesses begins —&#10;automatically every hour, or right away&#10;when you click &quot;Run discovery now&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="220" width="300" height="60" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n3" value="discover Lambda&#10;Companies House / Google Places / CSV&#10;politeFetch + per-domain dedup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="320" width="280" height="60" as="geometry"/>
+        <mxCell id="n3" value="It finds businesses from public directories&#10;and any lists you upload — skipping ones&#10;already seen, and being gentle on websites" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="320" width="300" height="60" as="geometry"/>
         </mxCell>
-        <mxCell id="d1" value="▦ Business · status = new" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;dashed=1;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="600" y="330" width="200" height="40" as="geometry"/>
-        </mxCell>
-
-        <mxCell id="n4" value="audit Lambda&#10;politeFetch site + screenshot → findings&#10;status = auditing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="420" width="280" height="60" as="geometry"/>
+        <mxCell id="d1" value="A new business is added to the list" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;dashed=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="610" y="330" width="210" height="40" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n5" value="qualifier Lambda&#10;Bedrock scores vs TargetingProfile" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="520" width="280" height="50" as="geometry"/>
+        <mxCell id="n4" value="It looks at the business's current&#10;website and takes a screenshot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="420" width="300" height="55" as="geometry"/>
         </mxCell>
 
-        <mxCell id="dec1" value="Lead&#10;qualified?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="1">
+        <mxCell id="n5" value="The AI checks the business against&#10;your &quot;good lead&quot; rules" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="515" width="300" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="dec1" value="Good&#10;enough&#10;lead?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="1">
           <mxGeometry x="320" y="600" width="120" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="rej1" value="status = rejected&#10;(dropped)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="600" y="615" width="200" height="50" as="geometry"/>
+        <mxCell id="rej1" value="Not a fit — set aside" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="610" y="620" width="210" height="40" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n6" value="spec-generator Lambda&#10;Bedrock redesign Spec" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="710" width="280" height="50" as="geometry"/>
+        <mxCell id="n6" value="The AI writes a plan for a&#10;better website for them" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="710" width="300" height="50" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n7" value="generator + publisher&#10;render preview site → Cloudflare R2 + Worker&#10;(passcode-gated)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="790" width="280" height="60" as="geometry"/>
+        <mxCell id="n7" value="The AI builds a private preview&#10;of the new website" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="790" width="300" height="55" as="geometry"/>
         </mxCell>
-        <mxCell id="d2" value="● Preview live on R2&#10;▦ status = awaiting_review" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="600" y="795" width="200" height="50" as="geometry"/>
-        </mxCell>
-
-        <mxCell id="n8" value="Operator opens /queue&#10;reviews Spec + the live preview site" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
-          <mxGeometry x="240" y="890" width="280" height="55" as="geometry"/>
+        <mxCell id="d2" value="Preview ready, waiting for your review" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="610" y="800" width="210" height="40" as="geometry"/>
         </mxCell>
 
-        <mxCell id="dec2" value="Review&#10;decision" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="1">
+        <mxCell id="n8" value="You open the review queue and look at&#10;the plan and the preview website" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="230" y="885" width="300" height="55" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="dec2" value="Your&#10;decision" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;" vertex="1" parent="1">
           <mxGeometry x="320" y="975" width="120" height="80" as="geometry"/>
         </mxCell>
-        <mxCell id="rej2" value="Reject → status = rejected_after_review" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="600" y="990" width="200" height="50" as="geometry"/>
+        <mxCell id="rej2" value="Reject — drop this one" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="610" y="995" width="210" height="40" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n9" value="email-draft Lambda&#10;Bedrock outreach email vs EmailToneProfile&#10;status = email_drafted" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
-          <mxGeometry x="240" y="1090" width="280" height="60" as="geometry"/>
+        <mxCell id="n9" value="The AI drafts an outreach email&#10;in your chosen tone" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1090" width="300" height="55" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n10" value="Operator reviews email on /queue → approve" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
-          <mxGeometry x="240" y="1190" width="280" height="50" as="geometry"/>
+        <mxCell id="n10" value="You read the email and approve it" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1190" width="300" height="45" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n11" value="sender Lambda → SES send&#10;withCostCap · idempotency&#10;status = emailed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;" vertex="1" parent="1">
-          <mxGeometry x="240" y="1280" width="280" height="60" as="geometry"/>
+        <mxCell id="n11" value="The email is sent to the business&#10;(with spend limits, and never twice)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1280" width="300" height="55" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n12" value="Prospect replies → SES inbound&#10;reply-detector → reply-triage (Bedrock classify)&#10;/replies · status = responded" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;" vertex="1" parent="1">
-          <mxGeometry x="240" y="1380" width="280" height="60" as="geometry"/>
+        <mxCell id="n12" value="If they reply, the AI sorts the reply&#10;and it appears in your Replies inbox" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1375" width="300" height="55" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n13" value="Operator marks converted&#10;status = converted" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
-          <mxGeometry x="240" y="1480" width="280" height="55" as="geometry"/>
+        <mxCell id="n13" value="You mark it as won when they&#10;become a customer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="230" y="1470" width="300" height="50" as="geometry"/>
         </mxCell>
 
-        <mxCell id="fb" value="Operator feedback (/feedback)&#10;weekly tuner-* propose TunerDeltas&#10;operator applies (/tuners) → profile versions bump" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
-          <mxGeometry x="220" y="1575" width="320" height="60" as="geometry"/>
+        <mxCell id="fb" value="You leave feedback. Each week the system&#10;suggests improvements to the rules, style&#10;and tone — you apply them with one click" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;" vertex="1" parent="1">
+          <mxGeometry x="215" y="1560" width="330" height="60" as="geometry"/>
         </mxCell>
 
-        <mxCell id="n14" value="metrics-rollup (hourly) → /metrics dashboard&#10;funnel · spend · per-vertical reply rate · profile versions&#10;◀ THIS is where you watch activity pick up" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;strokeWidth=3;" vertex="1" parent="1">
-          <mxGeometry x="220" y="1680" width="320" height="70" as="geometry"/>
+        <mxCell id="n14" value="Your dashboard updates every hour:&#10;how many businesses at each stage, spend,&#10;and reply rates&#10;◀ this is where you watch it all happen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="215" y="1665" width="330" height="75" as="geometry"/>
         </mxCell>
 
         <mxCell id="nEnd" value="" style="ellipse;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
-          <mxGeometry x="365" y="1790" width="30" height="30" as="geometry"/>
+          <mxGeometry x="365" y="1780" width="30" height="30" as="geometry"/>
         </mxCell>
         <mxCell id="nEndDot" value="" style="ellipse;html=1;fillColor=#000000;strokeColor=none;" vertex="1" parent="1">
-          <mxGeometry x="371" y="1796" width="18" height="18" as="geometry"/>
+          <mxGeometry x="371" y="1786" width="18" height="18" as="geometry"/>
         </mxCell>
 
         <mxCell id="e0" style="endArrow=block;html=1;" edge="1" parent="1" source="n0" target="n1"><mxGeometry relative="1" as="geometry"/></mxCell>
@@ -119,7 +119,7 @@
         <mxCell id="e10" style="endArrow=block;html=1;" edge="1" parent="1" source="n8" target="dec2"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e11" value="reject" style="endArrow=block;html=1;" edge="1" parent="1" source="dec2" target="rej2"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e12" value="approve" style="endArrow=block;html=1;" edge="1" parent="1" source="dec2" target="n9"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e13" value="regenerate" style="endArrow=block;html=1;dashed=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="dec2" target="n6">
+        <mxCell id="e13" value="ask for a new version" style="endArrow=block;html=1;dashed=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="dec2" target="n6">
           <mxGeometry relative="1" as="geometry">
             <Array as="points"><mxPoint x="170" y="1015"/><mxPoint x="170" y="735"/></Array>
           </mxGeometry>
@@ -131,9 +131,9 @@
         <mxCell id="e18" style="endArrow=block;html=1;" edge="1" parent="1" source="n13" target="fb"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e19" style="endArrow=block;html=1;" edge="1" parent="1" source="fb" target="n14"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e20" style="endArrow=block;html=1;" edge="1" parent="1" source="n14" target="nEnd"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="efb" value="tuned profiles raise future&#10;qualify / spec / email quality" style="endArrow=open;html=1;dashed=1;strokeColor=#6C8EBF;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="fb" target="n5">
+        <mxCell id="efb" value="your feedback makes future&#10;leads, designs and emails better" style="endArrow=open;html=1;dashed=1;strokeColor=#6C8EBF;exitX=1;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="fb" target="n5">
           <mxGeometry relative="1" as="geometry">
-            <Array as="points"><mxPoint x="860" y="1605"/><mxPoint x="860" y="545"/></Array>
+            <Array as="points"><mxPoint x="880" y="1590"/><mxPoint x="880" y="540"/></Array>
           </mxGeometry>
         </mxCell>
       </root>
