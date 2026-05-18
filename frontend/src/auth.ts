@@ -41,7 +41,8 @@ export async function completePkceFlow(
   code: string,
   authOrigin: string,
   clientId: string,
-  redirectUri: string
+  redirectUri: string,
+  bffBaseUrl: string
 ): Promise<void> {
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
   if (!verifier) {
@@ -67,8 +68,75 @@ export async function completePkceFlow(
   if (!tokens.id_token) {
     throw new Error('Token exchange response is missing id_token.');
   }
-  setAuthCookie(tokens.id_token);
+  setAuthCookie(tokens.id_token, bffBaseUrl);
   sessionStorage.removeItem(VERIFIER_KEY);
+}
+
+// cookieScopeDomain returns the cookie `Domain` so a cookie written by
+// the SPA host is ALSO sent to the BFF host (a sibling subdomain). It
+// is the longest shared dotted suffix of the two hostnames — e.g.
+// SPA `agency.techar.ch` + BFF `bff.agency.techar.ch` → `agency.techar.ch`;
+// preview `preview.agency.techar.ch` + `x.bff.agency.techar.ch` →
+// `agency.techar.ch`. Returns '' (a host-only cookie) when there is no
+// usable shared parent — single-label hosts like `localhost`, an IP, or
+// only a bare public suffix in common. WITHOUT this the auth_token
+// cookie is host-only on the SPA domain and never reaches the BFF, so
+// every authenticated route 401s.
+// Two-level public suffixes where the registrable domain is the last
+// THREE labels (e.g. `foo.co.uk`). Not the full PSL — just the ones we
+// could plausibly move to — so a `.co.uk`-style move can't silently
+// scope the cookie to a bare public suffix. The current production
+// domain (`agency.techar.ch`) is a single-label TLD and unaffected.
+const TWO_LEVEL_SUFFIXES = new Set([
+  'co.uk',
+  'org.uk',
+  'gov.uk',
+  'ac.uk',
+  'com.au',
+  'net.au',
+  'org.au',
+  'co.nz',
+  'co.za',
+  'com.br',
+]);
+
+export function cookieScopeDomain(spaHost: string, bffHost: string): string {
+  if (!spaHost || !bffHost || spaHost === bffHost) return '';
+  const a = spaHost.split('.');
+  const b = bffHost.split('.');
+  const shared: string[] = [];
+  for (let i = a.length - 1, j = b.length - 1; i >= 0 && j >= 0 && a[i] === b[j]; i--, j--) {
+    shared.unshift(a[i]);
+  }
+  // Minimum registrable-looking parent: ≥2 labels normally, but ≥3 when
+  // the tail is a known two-level public suffix (so we never emit a
+  // bare `co.uk`-style Domain that broadcasts the cookie site-wide).
+  const minLabels = TWO_LEVEL_SUFFIXES.has(shared.slice(-2).join('.')) ? 3 : 2;
+  return shared.length >= minLabels ? shared.join('.') : '';
+}
+
+// bffCookieDomain derives the cookie Domain from the BFF base URL and
+// the current SPA host. Tolerates a missing/garbage URL (returns '' —
+// a host-only cookie, the pre-existing behaviour).
+export function bffCookieDomain(bffBaseUrl: string): string {
+  let bffHost = '';
+  try {
+    bffHost = new URL(bffBaseUrl).hostname;
+  } catch {
+    return '';
+  }
+  return cookieScopeDomain(window.location.hostname, bffHost);
+}
+
+// clearAuthCookie expires the auth_token cookie for BOTH the host-only
+// scope (legacy cookies written before the Domain fix) and the
+// shared-domain scope, so a stale token can never linger after sign-out
+// or a 401.
+export function clearAuthCookie(bffBaseUrl: string): void {
+  const expired = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+  document.cookie = expired;
+  const domain = bffCookieDomain(bffBaseUrl);
+  if (domain) document.cookie = `${expired}; Domain=${domain}`;
 }
 
 // setAuthCookie writes the id_token to the `auth_token` cookie with
@@ -77,11 +145,13 @@ export async function completePkceFlow(
 // the authoritative cap (Cognito client config sets it to 60min by
 // default, and we expire the cookie a bit earlier so the BFF never
 // sees an expired-but-still-cookied request).
-function setAuthCookie(idToken: string): void {
+function setAuthCookie(idToken: string, bffBaseUrl: string): void {
   const maxAge = 60 * 30; // 30 minutes
   const sameSite = 'Lax';
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-  document.cookie = `auth_token=${idToken}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`;
+  const domain = bffCookieDomain(bffBaseUrl);
+  const domainAttr = domain ? `; Domain=${domain}` : '';
+  document.cookie = `auth_token=${idToken}; Path=/${domainAttr}; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`;
 }
 
 // generateCodeVerifier produces a random 64-character base64url
